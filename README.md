@@ -1,187 +1,280 @@
-# BOSSPROFIT — 2026.05.15 작업 로그
+﻿# BOSSPROFIT
 
-소규모 외식 자영업자를 위한 메뉴 단위 수익성 분석 서비스. 오늘 한 작업은 두 가지: **시장조사 보고서**와 **1주차 Django MVP**.
+소규모 외식 자영업자를 위한 메뉴 단위 원가 및 수익성 분석 프로젝트입니다.
 
----
+식당 운영 과정에서 메뉴별 재료 원가, 판매가, 배달 수수료, 포장비, 마진을 수기로 계산하기 어렵다는 문제에서 출발했습니다. 초기에는 Django 기반 MVP로 대시보드와 메뉴 상세 화면을 구현했고, 이후 같은 도메인을 TypeScript 기반 REST API로 재구현했습니다.
 
-## 1. 시장조사 보고서
+이 저장소는 하나의 프로젝트를 두 단계로 정리합니다.
 
-> 산출물: `bossprofit_market_research.html` (인터랙티브 HTML, Chart.js 기반)
-
-### 핵심 진단
-
-| 지표 | 수치 | 출처 |
-|---|---|---|
-| 2024년 개인사업자 폐업 | 사상 첫 **100.8만 명** 돌파 | 국세청 |
-| 소매·음식업 폐업률 | **20.2%** (전체 평균의 2배) | 국세청 |
-| 외식업 영업이익률 | 12.1%(2020) → **8.7%**(2024) | 농식품부·KREI |
-| 식재료비 비중 | 36.3% → **40.7%** | 농식품부·KREI |
-| 자영업자 1순위 경영 부담 | **원자재·재료비 22.4%** | 한경협 |
-| 3년 내 폐업 고려 비율 | **43.6%** | 한경협 |
-
-### 경쟁사 매트릭스
-
-| 서비스 | 핵심 가치 | 메뉴 단위 원가 | 메뉴 엔지니어링 |
-|---|---|---|---|
-| 캐시노트 (KCD, 140만 사업장) | 카드 매출 정산·고객 분석 | ❌ | ❌ |
-| 도도카트 (스포카) | 식자재 OCR·비용 분석 | △ | ❌ |
-| 그랜터 | 자동 회계·손익계산서 | ❌ | ❌ |
-| 앳트래커 | 기업형 매출·메뉴 분석 | ✓ | ✓ (B2B only) |
-| **BOSSPROFIT** | **메뉴별 수익성·신호등** | ✓ | ✓ |
-
-→ **시장 사각지대**: 자영업자가 쓸 수 있는 "메뉴 단위 수익성 분석"은 비어있다.
-
-### 포지셔닝 결정
-
-학술 용어(Star/Plowhorse/Puzzle/Dog) → **사장님 언어**로 변환:
-
-- 🟢 **간판 메뉴** — 더 밀어라
-- 🟡 **손해 보는 베스트셀러** — 가격 ↑ 또는 원가 ↓
-- 🟡 **숨은 효자** — 사진·이름·위치 개선
-- 🔴 **메뉴판 정리 대상**
-- 🔴 **배달 손실** — 단품 배달 적자 (묶음/최소주문 정책 필요)
-
-### TAM/SAM/SOM
-
-| | 정의 | 규모 |
-|---|---|---|
-| TAM | 전국 음식점·주점·카페 | 약 80만 곳 |
-| SAM | 메뉴 30개 이하·POS 사용 소규모 F&B | 약 35만 곳 |
-| SOM | 수도권 카페·소규모 한식·분식 (1년) | 5,000 곳 |
-
-월 9,900원 기준 SOM 10% 점유 → ARR ≈ 5,940만원.
-
-### 확인된 주요 리스크
-
-1. **POS 직접 연동 없으면** 자동화 약속이 깨짐 → 수기 입력 회귀
-2. **OCR 5% 오류**도 사장님은 신뢰 안 함 → 정확도 임계점 높음
-3. **캐시노트가 후행 출시** 가능성 → 해자(moat) 정의 필요
-
----
-
-## 2. Django 1주차 MVP
-
-> 산출물: `bossprofit_django_week1.zip` (실행 가능한 Django 프로젝트)
-
-엑셀 계산기(`BOSSPROFIT_1주차_MVP_최종계산기.xlsx`)를 Django로 그대로 이식. 21개 메뉴 + 35개 재료 + 118개 레시피 데이터 포함.
-
-### 검증 결과 (엑셀 ↔ Django 완전 일치)
-
-| KPI | 엑셀 | Django |
-|---|---|---|
-| 총 월매출 | 4,985,300원 | 4,985,300원 ✓ |
-| 월 예상이익 | 2,037,333원 | 2,037,334원 ✓ (반올림 1원차) |
-| 총 월주문수 | 492건 | 492건 ✓ |
-| 평균 원가율 | 37.8% | 37.8% ✓ |
-| 평균 판매량 | 23.4건 | 23.4건 ✓ |
-| 배달 손실 메뉴 | 13개 | 13개 ✓ |
-
-### 프로젝트 구조
-
+```text
+08_pjt/
+├── bossprofit/              Django 기반 BOSSPROFIT MVP
+├── boss-profit-api-ts/      TypeScript 기반 메뉴 원가 관리 API
+├── bossprofit_dashboard.png
+├── bossprofit_menu_detail.png
+└── README.md
 ```
+
+## 프로젝트 구성
+
+### 1. Django MVP
+
+`bossprofit/` 폴더에 있는 기존 MVP입니다.
+
+엑셀 계산기로 검증한 메뉴 원가 계산 로직을 Django로 옮기고, 대시보드와 메뉴 상세 화면에서 결과를 확인할 수 있도록 구현했습니다.
+
+주요 기능:
+
+- 21개 메뉴, 35개 재료, 118개 레시피 항목 샘플 데이터
+- 메뉴별 재료 원가 계산
+- 홀, 포장, 배달 마진 계산
+- 메뉴별 월 예상 이익 계산
+- 신호등 분류
+- Django admin을 통한 데이터 수정
+- 대시보드 및 메뉴 상세 화면 제공
+
+주요 파일:
+
+```text
 bossprofit/
 ├── manage.py
-├── requirements.txt
-├── seed_data.json                  # 21메뉴 + 35재료 + 118레시피
-├── SETUP.md
+├── db.sqlite3
+├── seed_data.json
 ├── bossprofit_project/
 │   ├── settings.py
-│   ├── urls.py
-│   └── wsgi.py
+│   └── urls.py
 └── profit/
-    ├── models.py                   # 5개 모델
-    ├── calculator.py               # 수익성 계산 + 신호등 분류
-    ├── views.py                    # 대시보드 / 메뉴 / 상세
+    ├── models.py
+    ├── calculator.py
+    ├── views.py
     ├── urls.py
     ├── admin.py
-    ├── management/commands/
-    │   └── seed_data.py            # JSON → DB 적재 + 재계산
-    ├── static/profit/
-    │   └── styles.css              # 자체 CSS (CDN 의존 없음)
-    └── templates/profit/
-        ├── base.html
-        ├── dashboard.html
-        ├── menu_list.html
-        └── menu_detail.html
+    ├── templates/
+    └── static/
 ```
 
-### 5개 모델
+### 2. TypeScript API
 
-| 모델 | 역할 |
-|---|---|
-| `Ingredient` | 식자재 마스터 (구매 단위 + 가격) → `unit_cost`는 property로 자동 계산 |
-| `Menu` | 판매 메뉴 (이름, 카테고리, 가격, 월 판매량, 포장비) |
-| `RecipeItem` | 메뉴 × 재료 + 사용량 |
-| `ProfitAssumption` | 매장 단위 가정 (홀/배달/포장 비중, 수수료 등) |
-| `MenuProfitSnapshot` | 계산 결과 캐싱 (시계열 보존) |
+`boss-profit-api-ts/` 폴더에 있는 서버 API 프로젝트입니다.
 
-### 3개 화면
+기존 Django MVP에서 확인한 메뉴 원가 계산 구조를 바탕으로, TypeScript, Express, Prisma, SQLite를 사용해 관계형 DB 기반 REST API로 재구현했습니다.
 
-| URL | 화면 |
-|---|---|
-| `/` | KPI 6개 + 핵심 인사이트 4개 + 메뉴 신호등 테이블 |
-| `/menus/` | 21개 메뉴 카드 그리드 |
-| `/menus/<menu_id>/` | 홀·포장·배달 마진 + 레시피 분해 (원가 비중 막대) |
-| `/admin/` | Django 관리자 (재료, 메뉴, 가정 직접 편집) |
-| `POST /recalculate/` | 헤더 "⟳ 재계산" 버튼 |
+주요 기능:
 
-### 신호등 분류 로직
+- 메뉴 목록 조회
+- 메뉴 상세 조회
+- 재료 목록 조회
+- 레시피 항목 조회 및 등록
+- 메뉴별 원가, 마진, 마진율 계산
+- HTML 화면에서 API 결과 확인
+- DB 구조 시각화 화면 제공
 
-```python
-if 배달마진 < 0 and 가중마진 < 0:
-    return "🔴 배달 손실"
+주요 API:
 
-if 월판매 >= 평균 and 원가율 <= 35%:  return "🟢 간판 메뉴"
-if 월판매 >= 평균 and 원가율 >  35%:  return "🟡 손해 보는 베스트셀러"
-if 월판매 <  평균 and 원가율 <= 35%:  return "🟡 숨은 효자"
-else:                                return "🔴 정리 검토"
+| Method | URL | 설명 |
+|---|---|---|
+| GET | `/api/menus` | 메뉴 목록 조회 |
+| GET | `/api/menus/:id` | 메뉴 상세 조회 |
+| GET | `/api/menus/:id/cost` | 메뉴별 원가 계산 |
+| GET | `/api/ingredients` | 재료 목록 조회 |
+| GET | `/api/recipe-items` | 레시피 항목 조회 |
+| POST | `/api/recipe-items` | 레시피 항목 등록 |
+
+브라우저 화면:
+
+```text
+http://localhost:3000
 ```
 
-평균 판매량 = 활성 메뉴 전체의 `monthly_orders` 평균 (현재 23.4건/월).
+DB 구조 화면:
 
-### 실행 방법
+```text
+http://localhost:3000/schema.html
+```
+
+API 안내:
+
+```text
+http://localhost:3000/api
+```
+
+## 왜 두 폴더로 나누었는가
+
+이 프로젝트는 먼저 Django로 식당 메뉴 원가 분석 MVP를 만들면서 문제 정의, 샘플 데이터 구성, 계산 로직 검증, 대시보드 화면 구현에 집중했습니다.
+
+이후 같은 도메인의 핵심 구조인 `메뉴`, `재료`, `레시피 항목`, `원가 계산`을 TypeScript 서버 API로 작게 재구현했습니다.
+
+두 폴더의 역할은 다음과 같습니다.
+
+| 폴더 | 역할 |
+|---|---|
+| `bossprofit/` | Django 기반 원본 MVP. 대시보드와 계산 검증 중심 |
+| `boss-profit-api-ts/` | TypeScript 기반 서버 API. RDBMS 설계와 REST API 중심 |
+
+## DB 설계 의도
+
+핵심 모델은 다음 세 가지입니다.
+
+```text
+Menu
+Ingredient
+RecipeItem
+```
+
+### Menu
+
+판매 메뉴를 저장합니다.
+
+- 메뉴명
+- 카테고리
+- 판매가
+
+### Ingredient
+
+재료 정보를 저장합니다.
+
+- 재료명
+- 단위
+- 단위당 가격
+
+### RecipeItem
+
+메뉴와 재료를 연결하는 중간 테이블입니다.
+
+- 메뉴 ID
+- 재료 ID
+- 해당 메뉴에 들어가는 재료 사용량
+
+`Menu`와 `Ingredient`는 다대다에 가까운 관계입니다. 하나의 메뉴에는 여러 재료가 들어가고, 하나의 재료는 여러 메뉴에 사용될 수 있습니다.
+
+하지만 단순한 다대다 관계만으로는 "왕돈까스에 돼지고기가 200g 들어간다"처럼 사용량을 저장하기 어렵습니다. 그래서 `RecipeItem`이라는 중간 테이블을 직접 설계해 `quantity`를 저장했습니다.
+
+```text
+Menu 1 --- N RecipeItem N --- 1 Ingredient
+```
+
+이 구조 덕분에 재료 단가가 바뀌면 해당 재료를 사용하는 메뉴들의 원가 계산 결과가 함께 바뀔 수 있습니다.
+
+## 원가 계산 로직
+
+메뉴 원가는 레시피 항목을 기준으로 계산합니다.
+
+```text
+재료별 원가 = 재료 사용량 * 재료 단위당 가격
+메뉴 총 원가 = 재료별 원가 합계
+마진 = 판매가 - 메뉴 총 원가
+마진율 = 마진 / 판매가 * 100
+```
+
+예시 응답:
+
+```json
+{
+  "menu": "왕돈까스",
+  "price": 13000,
+  "total_cost": 1860,
+  "margin": 11140,
+  "margin_rate": 85.69,
+  "items": [
+    {
+      "ingredient": "돼지고기",
+      "quantity": 200,
+      "unit": "g",
+      "unit_price": 7,
+      "cost": 1400
+    }
+  ]
+}
+```
+
+## 실행 방법
+
+### Django MVP 실행
 
 ```bash
-unzip bossprofit_django_week1.zip && cd bossprofit
-python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
+cd bossprofit
+python -m venv venv
+source venv/Scripts/activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_data
 python manage.py runserver
 ```
 
-브라우저에서 `http://127.0.0.1:8000` 접속.
+접속:
 
-### 데이터 변경 흐름
-
-1. 식자재 가격 변경 → `/admin/profit/ingredient/`
-2. 메뉴 가격/판매량 변경 → `/admin/profit/menu/`
-3. 가정 변경 (배달 비중 등) → `/admin/profit/profitassumption/`
-4. 대시보드 헤더의 **⟳ 재계산** 클릭 → `MenuProfitSnapshot` 새로 생성
-
----
-
-## 3. 의도적으로 단순화한 부분 (다음 작업 후보)
-
-- [ ] 사용자 인증 + 매장별 멀티테넌트
-- [ ] 사장님용 입력 폼 (admin 화면이 아닌 모바일 친화 UI)
-- [ ] 영수증 OCR 업로드 (CLOVA OCR vs Google Vision API PoC)
-- [ ] KAMIS Open API 시세 자동 반영 (cron / Celery)
-- [ ] 시계열 차트 (Chart.js로 월별 이익 추이)
-- [ ] 사장님 5명 인터뷰 (시장조사 보고서 마지막 체크리스트)
-
----
-
-## 4. 오늘 산출 파일 정리
-
-```
-bossprofit_market_research.html        시장조사 인터랙티브 보고서
-bossprofit_django_week1.zip            Django MVP 프로젝트 전체
-bossprofit_dashboard.png               대시보드 스크린샷
-bossprofit_menu_detail.png             메뉴 상세 스크린샷
-README.md                              이 파일
+```text
+http://127.0.0.1:8000
 ```
 
----
+### TypeScript API 실행
 
-*작성일: 2026.05.15 
+```bash
+cd boss-profit-api-ts
+npm install
+copy .env.example .env
+npx prisma generate
+npx prisma migrate dev --name init
+npm run seed
+npm run dev
+```
+
+접속:
+
+```text
+http://localhost:3000
+http://localhost:3000/schema.html
+http://localhost:3000/api/menus
+http://localhost:3000/api/menus/1/cost
+```
+
+Windows 로컬 환경에서 Prisma 마이그레이션이 실패하면 아래 순서로 SQLite 테이블을 직접 생성할 수 있습니다.
+
+```bash
+npm run db:create
+npx prisma generate
+npm run seed
+npm run dev
+```
+
+## 현재 구현 수준
+
+완료한 부분:
+
+- 식당 메뉴 원가 관리 도메인 정의
+- Django 기반 MVP 화면 구현
+- 메뉴, 재료, 레시피 항목 모델 구성
+- 메뉴별 원가 및 마진 계산 로직 구현
+- TypeScript 기반 REST API 재구현
+- Prisma ORM과 SQLite 기반 관계형 DB 모델 작성
+- API 결과 확인용 HTML 화면 추가
+- DB 구조 시각화 화면 추가
+- 샘플 데이터 입력 및 API 응답 검증
+
+아직 부족한 부분:
+
+- 사용자 로그인
+- 매장별 데이터 분리
+- 사용자가 직접 메뉴와 재료를 입력하는 완성형 UI
+- 재료 단가 변경 이력 관리
+- 외부 식재료 시세 API 연동
+- 배포
+- 테스트 코드
+
+## 구현 포인트
+
+- 메뉴와 재료를 별도 테이블로 분리했습니다.
+- 메뉴와 재료 사이에 `RecipeItem` 중간 테이블을 두어 재료 사용량을 저장했습니다.
+- DB에 저장된 관계 데이터를 기반으로 메뉴별 원가와 마진을 계산했습니다.
+- 계산 로직을 API로 제공해 브라우저나 다른 클라이언트에서 사용할 수 있도록 했습니다.
+- Django MVP와 TypeScript API를 분리해 화면 검증과 서버 API 구현을 각각 확인할 수 있도록 했습니다.
+
+## 스크린샷
+
+### Django 대시보드
+
+![BOSSPROFIT dashboard](./bossprofit_dashboard.png)
+
+### Django 메뉴 상세
+
+![BOSSPROFIT menu detail](./bossprofit_menu_detail.png)

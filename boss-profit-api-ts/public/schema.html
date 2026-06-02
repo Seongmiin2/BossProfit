@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BOSS PROFIT DB Schema</title>
+    <style>
+      :root {
+        --ink: #1d1714;
+        --muted: #76695f;
+        --line: #d8c7b4;
+        --paper: #fffaf2;
+        --panel: #fffdf8;
+        --accent: #e76f4d;
+        --blue: #2f6f93;
+        --green: #4e7d42;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Arial, "Noto Sans KR", sans-serif;
+      }
+
+      header {
+        background: var(--ink);
+        border-bottom: 3px solid var(--accent);
+        color: white;
+      }
+
+      .wrap {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      .top {
+        display: flex;
+        min-height: 72px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .brand {
+        color: var(--accent);
+        font-family: Georgia, serif;
+        font-size: 26px;
+        font-weight: 800;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      .nav {
+        color: #f2e8df;
+        font-size: 14px;
+      }
+
+      main {
+        padding: 34px 0 64px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 34px;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+      }
+
+      .hero {
+        margin-bottom: 28px;
+      }
+
+      .schema {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr 1.08fr 1fr;
+        gap: 34px;
+        align-items: start;
+        margin: 28px 0;
+        padding: 32px;
+        border: 1px solid var(--line);
+        background: #fbf3e8;
+        overflow: hidden;
+      }
+
+      .schema svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .table {
+        position: relative;
+        z-index: 1;
+        border: 2px solid var(--ink);
+        background: var(--panel);
+        box-shadow: 0 8px 0 rgba(29, 23, 20, 0.08);
+      }
+
+      .table h2 {
+        margin: 0;
+        padding: 14px 16px;
+        background: var(--ink);
+        color: white;
+        font-size: 20px;
+      }
+
+      .table.menu h2 {
+        background: var(--blue);
+      }
+
+      .table.recipe h2 {
+        background: var(--accent);
+      }
+
+      .table.ingredient h2 {
+        background: var(--green);
+      }
+
+      .field {
+        display: grid;
+        grid-template-columns: 98px 1fr;
+        min-height: 44px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .field:last-child {
+        border-bottom: 0;
+      }
+
+      .key {
+        padding: 12px 14px;
+        background: #f2e7d8;
+        color: var(--muted);
+        font-weight: 800;
+      }
+
+      .desc {
+        padding: 12px 14px;
+      }
+
+      .badge {
+        display: inline-block;
+        min-width: 34px;
+        margin-right: 6px;
+        padding: 2px 6px;
+        background: var(--ink);
+        color: white;
+        font-size: 11px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .badge.fk {
+        background: var(--accent);
+      }
+
+      .note-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+        margin-top: 26px;
+      }
+
+      .note {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        padding: 18px;
+      }
+
+      .note h3 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+
+      .flow {
+        margin-top: 28px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .flow h2 {
+        margin: 0;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+        background: #f3eadf;
+      }
+
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .step {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+      }
+
+      .step:last-child {
+        border-right: 0;
+      }
+
+      .step strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--accent);
+        font-size: 18px;
+      }
+
+      code {
+        background: #efe1d0;
+        padding: 2px 6px;
+      }
+
+      @media (max-width: 920px) {
+        .schema,
+        .note-grid,
+        .steps {
+          grid-template-columns: 1fr;
+        }
+
+        .schema svg {
+          display: none;
+        }
+
+        .step {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap top">
+        <div><span class="brand">BOSSPROFIT</span> DB SCHEMA</div>
+        <nav class="nav"><a href="/">API 화면</a> · <a href="/api">API JSON</a></nav>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <section class="hero">
+        <h1>메뉴 원가 관리 DB 구조</h1>
+        <p>
+          이 프로젝트의 핵심은 메뉴와 재료를 바로 붙이지 않고, 사용량을 저장하는
+          <code>RecipeItem</code> 중간 테이블을 둔 것입니다.
+        </p>
+      </section>
+
+      <section class="schema" aria-label="BOSS PROFIT ERD">
+        <svg viewBox="0 0 1180 430" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L8,3 z" fill="#e76f4d"></path>
+            </marker>
+          </defs>
+          <path d="M345 210 C430 210, 430 210, 510 210" stroke="#e76f4d" stroke-width="4" fill="none" marker-end="url(#arrow)"></path>
+          <path d="M755 210 C835 210, 835 210, 922 210" stroke="#e76f4d" stroke-width="4" fill="none" marker-end="url(#arrow)"></path>
+        </svg>
+
+        <article class="table menu">
+          <h2>Menu</h2>
+          <div class="field"><div class="key"><span class="badge">PK</span>id</div><div class="desc">메뉴 고유 ID</div></div>
+          <div class="field"><div class="key">name</div><div class="desc">메뉴명, 예: 왕돈까스</div></div>
+          <div class="field"><div class="key">category</div><div class="desc">카테고리, 예: 돈까스</div></div>
+          <div class="field"><div class="key">price</div><div class="desc">판매가</div></div>
+        </article>
+
+        <article class="table recipe">
+          <h2>RecipeItem</h2>
+          <div class="field"><div class="key"><span class="badge">PK</span>id</div><div class="desc">레시피 항목 ID</div></div>
+          <div class="field"><div class="key"><span class="badge fk">FK</span>menuId</div><div class="desc">어떤 메뉴의 재료인지</div></div>
+          <div class="field"><div class="key"><span class="badge fk">FK</span>ingredientId</div><div class="desc">어떤 재료를 쓰는지</div></div>
+          <div class="field"><div class="key">quantity</div><div class="desc">해당 메뉴에 들어가는 사용량</div></div>
+        </article>
+
+        <article class="table ingredient">
+          <h2>Ingredient</h2>
+          <div class="field"><div class="key"><span class="badge">PK</span>id</div><div class="desc">재료 고유 ID</div></div>
+          <div class="field"><div class="key">name</div><div class="desc">재료명, 예: 돼지고기</div></div>
+          <div class="field"><div class="key">unit</div><div class="desc">단위, 예: g, ml, 개</div></div>
+          <div class="field"><div class="key">unitPrice</div><div class="desc">단위당 가격</div></div>
+        </article>
+      </section>
+
+      <section class="note-grid">
+        <article class="note">
+          <h3>1. 왜 중간 테이블인가</h3>
+          <p>메뉴와 재료는 여러 개가 서로 연결됩니다. 그런데 연결만으로는 사용량을 저장할 수 없어서 <code>RecipeItem.quantity</code>가 필요합니다.</p>
+        </article>
+        <article class="note">
+          <h3>2. 원가 계산 기준</h3>
+          <p>메뉴 원가는 <code>quantity * unitPrice</code>의 합계입니다. 재료 단가가 바뀌면 API 계산 결과도 바뀝니다.</p>
+        </article>
+        <article class="note">
+          <h3>3. ERP와의 연결점</h3>
+          <p><code>Menu</code>는 상품, <code>Ingredient</code>는 원자재, <code>RecipeItem</code>은 제품별 소요 자재 구조로 설명할 수 있습니다.</p>
+        </article>
+      </section>
+
+      <section class="flow">
+        <h2>API가 DB를 사용하는 흐름</h2>
+        <div class="steps">
+          <div class="step"><strong>1</strong>브라우저가 <code>/api/menus/1/cost</code>를 요청합니다.</div>
+          <div class="step"><strong>2</strong>서버가 <code>Menu</code>와 연결된 <code>RecipeItem</code>을 조회합니다.</div>
+          <div class="step"><strong>3</strong>각 항목의 <code>Ingredient.unitPrice</code>를 함께 읽습니다.</div>
+          <div class="step"><strong>4</strong>원가, 마진, 마진율을 계산해 JSON으로 반환합니다.</div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
