@@ -9,6 +9,7 @@ BOSSPROFIT 데이터 모델
 - MenuProfitSnapshot: 계산 결과 캐싱용. 가격/원가가 바뀔 때마다 재계산
 """
 from django.db import models
+from django.conf import settings
 
 
 class Ingredient(models.Model):
@@ -128,6 +129,13 @@ class RecipeItem(models.Model):
 class ProfitAssumption(models.Model):
     """매장 단위 손익 가정 (MVP에서는 1행만 사용)"""
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name="assumptions",
+        verbose_name="소유자"
+    )
     label = models.CharField(
         max_length=50, default="기본 가정", verbose_name="가정 이름"
     )
@@ -156,9 +164,13 @@ class ProfitAssumption(models.Model):
         return f"{self.label} (홀{int(self.dine_in_share*100)}/배{int(self.delivery_share*100)}/포{int(self.takeout_share*100)})"
 
     @classmethod
-    def get_active(cls):
-        """현재 활성화된 가정 1개를 반환. 없으면 기본값으로 생성."""
-        obj = cls.objects.filter(is_active=True).first()
+    def get_active(cls, user=None):
+        """활성화된 가정 1개를 반환. 없으면 기본값으로 생성."""
+        if user and user.is_authenticated:
+            obj = cls.objects.filter(owner=user, is_active=True).first()
+            if obj:
+                return obj
+        obj = cls.objects.filter(owner__isnull=True, is_active=True).first()
         if obj is None:
             obj = cls.objects.create()
         return obj
