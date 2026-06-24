@@ -8,8 +8,44 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref(localStorage.getItem('refresh_token'))
   const loading = ref(false)
   const error = ref(null)
+  const initialized = ref(false)
 
   const isLoggedIn = computed(() => !!accessToken.value)
+  const store = computed(() => user.value?.store || null)
+  const onboarding = computed(() => user.value?.onboarding || null)
+  const needsOnboarding = computed(() =>
+    isLoggedIn.value && (
+      !store.value
+      || ['STORE', 'INGREDIENT', 'MENU', 'RECIPE'].includes(onboarding.value?.current_step)
+    )
+  )
+
+  function extractError(e) {
+    const data = e.response?.data
+    if (!data) return e.message
+    if (typeof data.detail === 'string') return data.detail
+    const firstValue = Object.values(data)[0]
+    if (Array.isArray(firstValue)) return firstValue[0]
+    if (typeof firstValue === 'string') return firstValue
+    return '입력 내용을 다시 확인해주세요.'
+  }
+
+  async function updateProfile(payload) {
+    const { data } = await api.put('/accounts/profile/', payload)
+    user.value = data
+    return data
+  }
+
+  async function updateStore(payload) {
+    const { data } = await api.put('/accounts/store/update/', payload)
+    user.value = data
+    return data
+  }
+
+  async function changePassword(payload) {
+    const { data } = await api.post('/accounts/password/', payload)
+    return data
+  }
 
   async function loadUser() {
     if (!accessToken.value) return
@@ -17,8 +53,9 @@ export const useAuthStore = defineStore('auth', () => {
       const { data } = await api.get('/accounts/me/')
       user.value = data
     } catch (e) {
-      console.error('Failed to load user:', e)
-      logout()
+      clearSession()
+    } finally {
+      initialized.value = true
     }
   }
 
@@ -29,7 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
       await api.post('/accounts/register/', { username, password, password2 })
       await login(username, password)
     } catch (e) {
-      error.value = e.response?.data?.detail || e.message
+      error.value = extractError(e)
       throw e
     } finally {
       loading.value = false
@@ -47,7 +84,7 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('refresh_token', data.refresh)
       await loadUser()
     } catch (e) {
-      error.value = e.response?.data?.detail || e.message
+      error.value = extractError(e)
       throw e
     } finally {
       loading.value = false
@@ -62,21 +99,54 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.setItem('access_token', data.access)
       return true
     } catch (e) {
-      logout()
+      clearSession()
       return false
     }
   }
 
-  function logout() {
+  function clearSession() {
     user.value = null
     accessToken.value = null
     refreshToken.value = null
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    initialized.value = true
   }
 
-  function initializeAuth() {
-    if (accessToken.value) loadUser()
+  async function logout() {
+    const token = refreshToken.value
+    try {
+      if (token && accessToken.value) {
+        await api.post('/accounts/logout/', { refresh: token })
+      }
+    } catch {
+      // 서버 토큰 상태와 무관하게 로컬 세션은 반드시 종료한다.
+    } finally {
+      clearSession()
+    }
+  }
+
+  async function createStore(payload) {
+    loading.value = true
+    error.value = null
+    try {
+      await api.post('/accounts/store/', payload)
+      await loadUser()
+      return user.value.store
+    } catch (e) {
+      error.value = extractError(e)
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function initializeAuth() {
+    if (accessToken.value) {
+      await loadUser()
+    } else {
+      initialized.value = true
+    }
   }
 
   return {
@@ -85,12 +155,21 @@ export const useAuthStore = defineStore('auth', () => {
     refreshToken,
     loading,
     error,
+    initialized,
     isLoggedIn,
+    store,
+    onboarding,
+    needsOnboarding,
+    extractError,
     register,
     login,
     logout,
     loadUser,
     refreshAccessToken,
     initializeAuth,
+    createStore,
+    updateProfile,
+    updateStore,
+    changePassword,
   }
 })

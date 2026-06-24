@@ -77,16 +77,21 @@ def classify(result: dict, average_orders: float, target_food_cost_rate: float) 
 
 
 @transaction.atomic
-def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuProfitSnapshot]:
+def recalculate_all(
+    assumption: Optional[ProfitAssumption] = None,
+    store=None,
+) -> list[MenuProfitSnapshot]:
     """모든 활성 메뉴를 재계산하고 Snapshot을 새로 저장.
 
     이전 스냅샷은 보존(시계열용). 호출하면 항상 새 행이 21개 생성됨.
     """
     if assumption is None:
-        assumption = ProfitAssumption.get_active()
+        assumption = ProfitAssumption.get_active(store=store)
+    if store is None:
+        store = assumption.store
     owner = assumption.owner
 
-    menus = list(Menu.objects.filter(is_active=True).prefetch_related(
+    menus = list(Menu.objects.filter(store=store, is_active=True).prefetch_related(
         "recipe_items__ingredient"
     ))
 
@@ -103,6 +108,7 @@ def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuP
         signal = classify(result, avg_orders, assumption.target_food_cost_rate)
         snapshots.append(
             MenuProfitSnapshot.objects.create(
+                store=store,
                 owner=owner,
                 menu=result["menu"],
                 base_cost=result["base_cost"],
@@ -120,16 +126,16 @@ def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuP
     return snapshots
 
 
-def get_latest_snapshots(user=None) -> list[MenuProfitSnapshot]:
+def get_latest_snapshots(user=None, store=None) -> list[MenuProfitSnapshot]:
     """각 메뉴별 가장 최근 Snapshot만 반환."""
-    owner_filter = {"owner": user} if user and user.is_authenticated else {"owner__isnull": True}
-    if user and user.is_authenticated:
-        has_user_snapshots = MenuProfitSnapshot.objects.filter(owner=user).exists()
-        if not has_user_snapshots:
-            owner_filter = {"owner__isnull": True}
+    if user and user.is_authenticated and store is None:
+        return []
+    snapshot_filter = {"store": store}
+    if store is None:
+        snapshot_filter["owner__isnull"] = True
     latest = []
-    for menu in Menu.objects.filter(is_active=True).order_by("menu_id"):
-        snap = menu.snapshots.filter(**owner_filter).first()
+    for menu in Menu.objects.filter(store=store, is_active=True).order_by("menu_id"):
+        snap = menu.snapshots.filter(**snapshot_filter).first()
         if snap:
             latest.append(snap)
     return latest

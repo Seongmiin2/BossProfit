@@ -5,31 +5,57 @@ import { useDashboardStore } from '@/stores/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import { formatKRW } from '@/utils/format'
 import SignalBadge from '@/components/SignalBadge.vue'
+import BossPersona from '@/components/BossPersona.vue'
 
 const dashboardStore = useDashboardStore()
 const authStore = useAuthStore()
 const router = useRouter()
 
 const showAssumptionModal = ref(false)
+const showHealthCriteria = ref(false)
 const assumptionForm = ref({})
 const savedMessage = ref('')
 
 onMounted(() => dashboardStore.load())
 
-const healthScore = computed(() => {
+const healthCriteria = computed(() => {
   const summary = dashboardStore.summary
-  if (!summary || !dashboardStore.snapshots.length) return 0
+  if (!summary || !dashboardStore.snapshots.length) return []
   const targetRate = (dashboardStore.assumption?.target_food_cost_rate || 0.35) * 100
-  const costPenalty = Math.max(0, summary.avg_food_cost_rate - targetRate) * 2
-  const lossPenalty = (summary.delivery_loss_count / dashboardStore.snapshots.length) * 35
-  const profitBonus = summary.total_profit > 0 ? 12 : 0
-  return Math.round(Math.min(98, Math.max(18, 82 - costPenalty - lossPenalty + profitBonus)))
+  return [
+    {
+      label: '월 예상 이익',
+      value: `${formatKRW(summary.total_profit)}원`,
+      passed: summary.total_profit > 0,
+      description: '예상 이익이 0원보다 큰지 확인합니다.',
+    },
+    {
+      label: '평균 원가율',
+      value: `${summary.avg_food_cost_rate.toFixed(1)}%`,
+      passed: summary.avg_food_cost_rate <= targetRate,
+      description: `설정한 목표 원가율 ${targetRate.toFixed(0)}% 이내인지 확인합니다.`,
+    },
+    {
+      label: '배달 손실 메뉴',
+      value: `${summary.delivery_loss_count}개`,
+      passed: summary.delivery_loss_count === 0,
+      description: '배달 판매 시 적자가 발생하는 메뉴가 없는지 확인합니다.',
+    },
+  ]
 })
 
+const passedHealthCriteria = computed(() =>
+  healthCriteria.value.filter((item) => item.passed).length
+)
+
 const healthTone = computed(() => {
-  if (healthScore.value >= 80) return { label: '아주 건강해요', className: 'good', emoji: '✨' }
-  if (healthScore.value >= 60) return { label: '조금만 다듬어요', className: 'care', emoji: '👀' }
-  return { label: '지금 관리가 필요해요', className: 'danger', emoji: '🚨' }
+  if (passedHealthCriteria.value === 3) {
+    return { label: '현재 기준은 안정적이에요', className: 'good' }
+  }
+  if (passedHealthCriteria.value === 2) {
+    return { label: '한 가지를 점검해보세요', className: 'care' }
+  }
+  return { label: '우선 확인할 항목이 있어요', className: 'danger' }
 })
 
 const profitRate = computed(() => {
@@ -117,25 +143,67 @@ const handleAssumptionSubmit = async () => {
             가게 수익을 확인해볼까요?
           </h1>
         </div>
-        <button v-if="authStore.isLoggedIn" class="soft-button desktop-only" @click="dashboardStore.recalculate()">
-          ↻ 최신 정보로 계산
-        </button>
+        <div class="welcome-actions desktop-only">
+          <div class="dashboard-personas" aria-label="BOSSPROFIT 남녀 사장님 페르소나">
+            <div>
+              <BossPersona persona="female" alt="" />
+              <BossPersona persona="male" alt="" />
+            </div>
+            <p><strong>함께 보는 오늘</strong><span>시장과 매장을 한눈에</span></p>
+          </div>
+          <button v-if="authStore.isLoggedIn" class="soft-button" @click="dashboardStore.recalculate()">
+            ↻ 최신 정보로 계산
+          </button>
+        </div>
       </section>
 
       <section class="health-card" :class="healthTone.className">
         <div class="health-card-top">
-          <div>
-            <span class="health-label">이번 달 수익 건강</span>
-            <h2>{{ healthTone.emoji }} {{ healthTone.label }}</h2>
+          <div class="health-card-copy">
+            <div class="health-label-row">
+              <span class="health-label">이번 달 운영 체크</span>
+              <button
+                class="health-criteria-toggle"
+                type="button"
+                :aria-expanded="showHealthCriteria"
+                @click="showHealthCriteria = !showHealthCriteria"
+              >
+                판단 기준
+              </button>
+            </div>
+            <h2>{{ healthTone.label }}</h2>
             <p>{{ dashboardStore.storeName }}의 메뉴 {{ dashboardStore.snapshots.length }}개를 분석했어요.</p>
           </div>
-          <div class="score-ring" :style="{ '--score': `${healthScore * 3.6}deg` }">
-            <div>
-              <strong>{{ healthScore }}</strong>
-              <span>점</span>
+          <div
+            class="score-ring"
+            :style="{ '--score': `${(passedHealthCriteria / 3) * 360}deg` }"
+            :aria-label="`운영 체크 기준 3개 중 ${passedHealthCriteria}개 양호`"
+          >
+            <div class="score-ring-content">
+              <strong>{{ passedHealthCriteria }}<small>/3</small></strong>
+              <span>양호</span>
             </div>
           </div>
         </div>
+
+        <Transition name="criteria-reveal">
+          <div v-if="showHealthCriteria" class="health-criteria-panel">
+            <div
+              v-for="criterion in healthCriteria"
+              :key="criterion.label"
+              class="health-criterion"
+              :class="{ passed: criterion.passed }"
+            >
+              <span class="criterion-status">{{ criterion.passed ? '✓' : '!' }}</span>
+              <div>
+                <strong>{{ criterion.label }}</strong>
+                <p>{{ criterion.description }}</p>
+              </div>
+              <b>{{ criterion.value }}</b>
+            </div>
+            <small>이 값은 예측 모델 점수가 아니라 현재 매장 데이터를 확인하는 3가지 운영 기준입니다.</small>
+          </div>
+        </Transition>
 
         <div class="health-summary">
           <div>

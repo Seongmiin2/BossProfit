@@ -56,6 +56,8 @@ class Command(BaseCommand):
 
             # 1. Assumptions (1개만 유지)
             ProfitAssumption.objects.update_or_create(
+                store=None,
+                owner=None,
                 label="기본 가정",
                 defaults={**data["assumptions"], "is_active": True},
             )
@@ -64,6 +66,7 @@ class Command(BaseCommand):
             # 2. Ingredients
             for item in data["ingredients"]:
                 Ingredient.objects.update_or_create(
+                    store=None,
                     ingredient_id=item["ingredient_id"],
                     defaults={
                         "name": item["name"],
@@ -81,6 +84,7 @@ class Command(BaseCommand):
             # 3. Menus
             for m in data["menus"]:
                 Menu.objects.update_or_create(
+                    store=None,
                     menu_id=m["menu_id"],
                     defaults={
                         "name": m["menu_name"],
@@ -97,8 +101,14 @@ class Command(BaseCommand):
 
             # 4. Recipes
             # 매핑 캐시
-            ing_map = {i.ingredient_id: i for i in Ingredient.objects.all()}
-            menu_map = {m.menu_id: m for m in Menu.objects.all()}
+            ing_map = {
+                i.ingredient_id: i
+                for i in Ingredient.objects.filter(store__isnull=True)
+            }
+            menu_map = {
+                m.menu_id: m
+                for m in Menu.objects.filter(store__isnull=True)
+            }
 
             # 같은 메뉴-재료 페어는 한 번만 등록 (unique_together)
             created_count = 0

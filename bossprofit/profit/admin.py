@@ -4,6 +4,7 @@ from .models import (
     Ingredient,
     Menu,
     RecipeItem,
+    DailyMenuSale,
     ProfitAssumption,
     MenuProfitSnapshot,
 )
@@ -18,11 +19,11 @@ class RecipeItemInline(admin.TabularInline):
 @admin.register(Ingredient)
 class IngredientAdmin(admin.ModelAdmin):
     list_display = (
-        "name", "category", "purchase_quantity", "unit",
+        "store", "name", "category", "purchase_quantity", "unit",
         "purchase_price", "unit_cost_display",
     )
-    list_filter = ("category",)
-    search_fields = ("name", "ingredient_id")
+    list_filter = ("store", "category")
+    search_fields = ("store__name", "name", "ingredient_id")
     ordering = ("category", "name")
 
     @admin.display(description="단가(원)")
@@ -33,11 +34,11 @@ class IngredientAdmin(admin.ModelAdmin):
 @admin.register(Menu)
 class MenuAdmin(admin.ModelAdmin):
     list_display = (
-        "menu_id", "name", "category", "price",
+        "store", "menu_id", "name", "category", "price",
         "monthly_orders", "food_cost_display", "is_active",
     )
-    list_filter = ("category", "is_active")
-    search_fields = ("name", "menu_id")
+    list_filter = ("store", "category", "is_active")
+    search_fields = ("store__name", "name", "menu_id")
     inlines = [RecipeItemInline]
 
     @admin.display(description="원가율(%)")
@@ -48,7 +49,7 @@ class MenuAdmin(admin.ModelAdmin):
 @admin.register(ProfitAssumption)
 class ProfitAssumptionAdmin(admin.ModelAdmin):
     list_display = (
-        "label", "dine_in_share", "delivery_share", "takeout_share",
+        "store", "label", "dine_in_share", "delivery_share", "takeout_share",
         "delivery_commission_rate", "rider_fee", "is_active",
     )
 
@@ -56,13 +57,20 @@ class ProfitAssumptionAdmin(admin.ModelAdmin):
 @admin.register(MenuProfitSnapshot)
 class MenuProfitSnapshotAdmin(admin.ModelAdmin):
     list_display = (
-        "menu", "monthly_profit", "weighted_margin",
+        "store", "menu", "monthly_profit", "weighted_margin",
         "food_cost_rate", "signal", "created_at",
     )
-    list_filter = ("signal", "menu__category")
+    list_filter = ("store", "signal", "menu__category")
     readonly_fields = (
-        "menu", "base_cost", "food_cost_rate",
+        "store", "owner", "menu", "base_cost", "food_cost_rate",
         "dine_in_margin", "takeout_margin", "delivery_margin",
         "weighted_margin", "monthly_profit", "monthly_revenue",
         "signal", "created_at",
     )
+
+
+@admin.register(DailyMenuSale)
+class DailyMenuSaleAdmin(admin.ModelAdmin):
+    list_display = ("sale_date", "store", "menu", "channel", "quantity")
+    list_filter = ("store", "channel", "sale_date")
+    search_fields = ("store__name", "menu__name")

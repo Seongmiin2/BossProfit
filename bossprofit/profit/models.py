@@ -25,8 +25,16 @@ class Ingredient(models.Model):
         ("기타", "기타"),
     ]
 
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="ingredients",
+        verbose_name="매장",
+    )
     ingredient_id = models.CharField(
-        max_length=50, unique=True, help_text="예: PORK_LOIN_G"
+        max_length=50, help_text="예: PORK_LOIN_G"
     )
     name = models.CharField(max_length=100, verbose_name="재료명")
     category = models.CharField(
@@ -43,6 +51,12 @@ class Ingredient(models.Model):
         verbose_name = "식자재"
         verbose_name_plural = "식자재"
         ordering = ["category", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["store", "ingredient_id"],
+                name="unique_store_ingredient_id",
+            ),
+        ]
 
     @property
     def unit_cost(self) -> float:
@@ -67,8 +81,16 @@ class Menu(models.Model):
         ("기타", "기타"),
     ]
 
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="menus",
+        verbose_name="매장",
+    )
     menu_id = models.CharField(
-        max_length=50, unique=True, help_text="예: M001"
+        max_length=50, help_text="예: M001"
     )
     name = models.CharField(max_length=100, verbose_name="메뉴명")
     category = models.CharField(
@@ -87,6 +109,12 @@ class Menu(models.Model):
         verbose_name = "메뉴"
         verbose_name_plural = "메뉴"
         ordering = ["menu_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["store", "menu_id"],
+                name="unique_store_menu_id",
+            ),
+        ]
 
     def food_cost(self) -> float:
         return sum(item.cost for item in self.recipe_items.all())
@@ -126,9 +154,63 @@ class RecipeItem(models.Model):
         return f"{self.menu.name} ← {self.ingredient.name} {self.quantity}{self.ingredient.unit}"
 
 
+class DailyMenuSale(models.Model):
+    """매장별 일일 메뉴 판매량."""
+
+    CHANNEL_CHOICES = [
+        ("ALL", "전체"),
+        ("DINE_IN", "홀"),
+        ("DELIVERY", "배달"),
+        ("TAKEOUT", "포장"),
+    ]
+
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        related_name="daily_sales",
+        verbose_name="매장",
+    )
+    menu = models.ForeignKey(
+        Menu,
+        on_delete=models.CASCADE,
+        related_name="daily_sales",
+        verbose_name="메뉴",
+    )
+    sale_date = models.DateField(verbose_name="판매일")
+    channel = models.CharField(
+        max_length=20,
+        choices=CHANNEL_CHOICES,
+        default="ALL",
+        verbose_name="판매 채널",
+    )
+    quantity = models.PositiveIntegerField(verbose_name="판매량")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-sale_date", "menu_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["store", "menu", "sale_date", "channel"],
+                name="unique_daily_menu_sale",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.sale_date} / {self.menu.name} / {self.quantity}"
+
+
 class ProfitAssumption(models.Model):
     """매장 단위 손익 가정 (MVP에서는 1행만 사용)"""
 
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="profit_assumptions",
+        verbose_name="매장",
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -164,8 +246,37 @@ class ProfitAssumption(models.Model):
         return f"{self.label} (홀{int(self.dine_in_share*100)}/배{int(self.delivery_share*100)}/포{int(self.takeout_share*100)})"
 
     @classmethod
-    def get_active(cls, user=None):
+    def get_active(cls, user=None, store=None):
         """활성화된 가정 1개를 반환. 없으면 기본값으로 생성."""
+        if store is not None:
+            obj = cls.objects.filter(store=store, is_active=True).first()
+            if obj:
+                return obj
+            default = cls.objects.filter(
+                store__isnull=True,
+                owner__isnull=True,
+                is_active=True,
+            ).first()
+            defaults = {
+                "owner": user if user and user.is_authenticated else None,
+                "label": default.label if default else "기본 가정",
+                "dine_in_share": default.dine_in_share if default else 0.50,
+                "delivery_share": default.delivery_share if default else 0.30,
+                "takeout_share": default.takeout_share if default else 0.20,
+                "delivery_commission_rate": (
+                    default.delivery_commission_rate if default else 0.12
+                ),
+                "rider_fee": default.rider_fee if default else 4600,
+                "rider_fee_store_share": (
+                    default.rider_fee_store_share if default else 1.0
+                ),
+                "target_food_cost_rate": (
+                    default.target_food_cost_rate if default else 0.35
+                ),
+                "is_active": True,
+            }
+            return cls.objects.create(store=store, **defaults)
+
         if user and user.is_authenticated:
             obj = cls.objects.filter(owner=user, is_active=True).first()
             if obj:
@@ -190,13 +301,25 @@ class ProfitAssumption(models.Model):
             }
             return cls.objects.create(owner=user, **defaults)
 
-        obj = cls.objects.filter(owner__isnull=True, is_active=True).first()
+        obj = cls.objects.filter(
+            store__isnull=True,
+            owner__isnull=True,
+            is_active=True,
+        ).first()
         return obj or cls.objects.create()
 
 
 class MenuProfitSnapshot(models.Model):
     """계산 결과 스냅샷 (재료/가격/가정이 바뀌면 재생성)"""
 
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="profit_snapshots",
+        verbose_name="매장",
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

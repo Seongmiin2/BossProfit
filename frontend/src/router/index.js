@@ -4,13 +4,21 @@ import { useAuthStore } from '@/stores/auth'
 const routes = [
   {
     path: '/',
+    name: 'Landing',
+    component: () => import('@/views/LandingView.vue'),
+    meta: { immersive: true },
+  },
+  {
+    path: '/app',
     name: 'Dashboard',
     component: () => import('@/views/DashboardView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/menus',
     name: 'MenuList',
     component: () => import('@/views/MenuListView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/menus/create',
@@ -29,27 +37,50 @@ const routes = [
     path: '/ingredients',
     name: 'IngredientList',
     component: () => import('@/views/IngredientListView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/history',
     name: 'History',
     component: () => import('@/views/HistoryView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/market',
+    name: 'Market',
+    component: () => import('@/views/MarketView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('@/views/SettingsView.vue'),
+    meta: { requiresAuth: true },
   },
   {
     path: '/menus/:menuId',
     name: 'MenuDetail',
     component: () => import('@/views/MenuDetailView.vue'),
     props: true,
+    meta: { requiresAuth: true },
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),
+    meta: { guestOnly: true, immersive: true },
   },
   {
     path: '/register',
     name: 'Register',
     component: () => import('@/views/RegisterView.vue'),
+    meta: { guestOnly: true, immersive: true },
+  },
+  {
+    path: '/onboarding',
+    name: 'Onboarding',
+    component: () => import('@/views/OnboardingView.vue'),
+    meta: { requiresAuth: true, immersive: true },
   },
   {
     path: '/:pathMatch(.*)*',
@@ -63,14 +94,28 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
-  // requiresAuth 메타가 없으면 모든 라우트 허용
-  if (to.meta?.requiresAuth && !authStore.isLoggedIn) {
-    next('/login')
-  } else {
-    next()
+  if (!authStore.initialized) {
+    await authStore.initializeAuth()
   }
+  if (to.meta?.requiresAuth && !authStore.isLoggedIn) {
+    return next({ name: 'Login', query: { redirect: to.fullPath } })
+  }
+  if (to.meta?.guestOnly && authStore.isLoggedIn) {
+    return next(authStore.needsOnboarding ? '/onboarding' : '/app')
+  }
+  if (
+    authStore.isLoggedIn
+    && authStore.needsOnboarding
+    && to.name !== 'Onboarding'
+    && to.name !== 'Landing'
+    && to.name !== 'IngredientList'
+    && to.name !== 'MenuCreate'
+  ) {
+    return next('/onboarding')
+  }
+  next()
 })
 
 export default router

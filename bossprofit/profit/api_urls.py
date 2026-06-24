@@ -26,4 +26,7 @@ urlpatterns = [
 
     # History
     path("history/", api_views.api_history, name="api-history"),
+
+    # Daily Sales
+    path("sales/daily/", api_views.api_daily_sales_upsert, name="api-daily-sales"),
 ]

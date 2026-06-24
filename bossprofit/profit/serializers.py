@@ -2,7 +2,14 @@
 BOSSPROFIT REST API Serializers
 """
 from rest_framework import serializers
-from .models import Ingredient, Menu, RecipeItem, ProfitAssumption, MenuProfitSnapshot
+from .models import (
+    Ingredient,
+    Menu,
+    RecipeItem,
+    DailyMenuSale,
+    ProfitAssumption,
+    MenuProfitSnapshot,
+)
 
 
 class IngredientSerializer(serializers.ModelSerializer):
@@ -122,7 +129,8 @@ class RecipeItemWriteSerializer(serializers.Serializer):
     memo = serializers.CharField(max_length=255, required=False, allow_blank=True)
 
     def validate_ingredient_id(self, value):
-        if not Ingredient.objects.filter(ingredient_id=value).exists():
+        store = self.context.get("store")
+        if not Ingredient.objects.filter(store=store, ingredient_id=value).exists():
             raise serializers.ValidationError(f"재료 '{value}'가 존재하지 않습니다.")
         return value
 
@@ -146,11 +154,24 @@ class MenuWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("같은 재료를 중복해서 추가할 수 없습니다.")
         return value
 
+    def validate_menu_id(self, value):
+        store = self.context.get("store")
+        query = Menu.objects.filter(store=store, menu_id=value)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
+            raise serializers.ValidationError("이미 사용 중인 메뉴 ID입니다.")
+        return value
+
     def create(self, validated_data):
         recipe_items_data = validated_data.pop('recipe_items', [])
-        menu = Menu.objects.create(**validated_data)
+        store = self.context["store"]
+        menu = Menu.objects.create(store=store, **validated_data)
         for item_data in recipe_items_data:
-            ingredient = Ingredient.objects.get(ingredient_id=item_data['ingredient_id'])
+            ingredient = Ingredient.objects.get(
+                store=store,
+                ingredient_id=item_data['ingredient_id'],
+            )
             RecipeItem.objects.create(
                 menu=menu,
                 ingredient=ingredient,
@@ -168,7 +189,10 @@ class MenuWriteSerializer(serializers.ModelSerializer):
         if recipe_items_data is not None:
             instance.recipe_items.all().delete()
             for item_data in recipe_items_data:
-                ingredient = Ingredient.objects.get(ingredient_id=item_data['ingredient_id'])
+                ingredient = Ingredient.objects.get(
+                    store=instance.store,
+                    ingredient_id=item_data['ingredient_id'],
+                )
                 RecipeItem.objects.create(
                     menu=instance,
                     ingredient=ingredient,
@@ -187,6 +211,37 @@ class IngredientWriteSerializer(serializers.ModelSerializer):
     def validate_purchase_quantity(self, value):
         if value <= 0:
             raise serializers.ValidationError("구매 수량은 0보다 커야 합니다.")
+        return value
+
+    def validate_ingredient_id(self, value):
+        store = self.context.get("store")
+        query = Ingredient.objects.filter(store=store, ingredient_id=value)
+        if self.instance:
+            query = query.exclude(pk=self.instance.pk)
+        if query.exists():
+            raise serializers.ValidationError("이미 사용 중인 재료 ID입니다.")
+        return value
+
+    def create(self, validated_data):
+        return Ingredient.objects.create(
+            store=self.context["store"],
+            **validated_data,
+        )
+
+
+class DailyMenuSaleWriteSerializer(serializers.Serializer):
+    menu_id = serializers.CharField(max_length=50)
+    sale_date = serializers.DateField()
+    quantity = serializers.IntegerField(min_value=0)
+    channel = serializers.ChoiceField(
+        choices=DailyMenuSale.CHANNEL_CHOICES,
+        default="ALL",
+    )
+
+    def validate_menu_id(self, value):
+        store = self.context["store"]
+        if not Menu.objects.filter(store=store, menu_id=value).exists():
+            raise serializers.ValidationError("해당 매장의 메뉴가 아닙니다.")
         return value
 
 

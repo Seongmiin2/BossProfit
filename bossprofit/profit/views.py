@@ -88,6 +88,7 @@ def _build_insights(snapshots):
     return insights
 
 
+@staff_member_required
 def dashboard(request):
     """1주차 핵심 화면."""
     snapshots = get_latest_snapshots()
@@ -120,6 +121,7 @@ def dashboard(request):
     return render(request, "profit/dashboard.html", context)
 
 
+@staff_member_required
 def menu_list(request):
     snapshots = get_latest_snapshots()
     return render(
@@ -129,6 +131,7 @@ def menu_list(request):
     )
 
 
+@staff_member_required
 def menu_detail(request, menu_id):
     menu = get_object_or_404(Menu, menu_id=menu_id)
     assumption = ProfitAssumption.get_active()
