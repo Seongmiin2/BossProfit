@@ -1,5 +1,14 @@
-# Vue 3 + Vite
+# BOSSPROFIT Frontend
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Vue 3, Vite, Pinia 기반 BOSSPROFIT 사용자 화면입니다. Django REST API의
+`/api/v1` 엔드포인트를 사용하며 개발 서버에서는 `http://localhost:8000`으로
+프록시합니다.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+```bash
+npm install
+npm run dev
+```
+
+프런트엔드: `http://localhost:5173`
+
+먼저 `../bossprofit`의 Django 서버를 실행해야 합니다.

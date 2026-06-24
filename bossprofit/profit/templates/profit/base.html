@@ -22,10 +22,12 @@
       <a href="{% url 'dashboard' %}">대시보드</a>
       <a href="{% url 'menu_list' %}">메뉴</a>
       <a href="/admin/">관리자</a>
-      <form action="{% url 'recalculate' %}" method="post" style="margin-left:8px;">
-        {% csrf_token %}
-        <button class="btn-coral">⟳ 재계산</button>
-      </form>
+      {% if request.user.is_staff %}
+        <form action="{% url 'recalculate' %}" method="post" style="margin-left:8px;">
+          {% csrf_token %}
+          <button class="btn-coral">⟳ 재계산</button>
+        </form>
+      {% endif %}
     </nav>
   </div>
 </header>

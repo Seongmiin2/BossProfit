@@ -65,7 +65,6 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
-  console.log('Router navigate to:', to.path, 'requiresAuth:', to.meta?.requiresAuth, 'isLoggedIn:', authStore.isLoggedIn)
   // requiresAuth 메타가 없으면 모든 라우트 허용
   if (to.meta?.requiresAuth && !authStore.isLoggedIn) {
     next('/login')

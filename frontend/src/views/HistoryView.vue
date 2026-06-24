@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { LineChart } from 'vue-chartjs'
+import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js'
 import client from '@/api/client'
 import { formatKRW } from '@/utils/format'
@@ -164,7 +164,7 @@ async function handleFilterChange() {
     <!-- Chart -->
     <div v-else-if="chartData" style="background: white; padding: 20px; border-radius: 4px; border: 1px solid var(--line); margin-bottom: 24px;">
       <div style="position: relative; height: 400px;">
-        <LineChart :data="chartData" :options="chartOptions" />
+        <Line :data="chartData" :options="chartOptions" />
       </div>
     </div>
 

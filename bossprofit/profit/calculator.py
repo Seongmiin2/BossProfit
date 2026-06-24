@@ -84,6 +84,7 @@ def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuP
     """
     if assumption is None:
         assumption = ProfitAssumption.get_active()
+    owner = assumption.owner
 
     menus = list(Menu.objects.filter(is_active=True).prefetch_related(
         "recipe_items__ingredient"
@@ -102,6 +103,7 @@ def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuP
         signal = classify(result, avg_orders, assumption.target_food_cost_rate)
         snapshots.append(
             MenuProfitSnapshot.objects.create(
+                owner=owner,
                 menu=result["menu"],
                 base_cost=result["base_cost"],
                 food_cost_rate=result["food_cost_rate"],
@@ -118,11 +120,16 @@ def recalculate_all(assumption: Optional[ProfitAssumption] = None) -> list[MenuP
     return snapshots
 
 
-def get_latest_snapshots() -> list[MenuProfitSnapshot]:
+def get_latest_snapshots(user=None) -> list[MenuProfitSnapshot]:
     """각 메뉴별 가장 최근 Snapshot만 반환."""
+    owner_filter = {"owner": user} if user and user.is_authenticated else {"owner__isnull": True}
+    if user and user.is_authenticated:
+        has_user_snapshots = MenuProfitSnapshot.objects.filter(owner=user).exists()
+        if not has_user_snapshots:
+            owner_filter = {"owner__isnull": True}
     latest = []
     for menu in Menu.objects.filter(is_active=True).order_by("menu_id"):
-        snap = menu.snapshots.first()  # ordering = ['-created_at']
+        snap = menu.snapshots.filter(**owner_filter).first()
         if snap:
             latest.append(snap)
     return latest

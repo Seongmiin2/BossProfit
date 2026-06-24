@@ -4,11 +4,13 @@
 
 식당 운영 과정에서 메뉴별 재료 원가, 판매가, 배달 수수료, 포장비, 마진을 수기로 계산하기 어렵다는 문제에서 출발했습니다. 초기에는 Django 기반 MVP로 대시보드와 메뉴 상세 화면을 구현했고, 이후 같은 도메인을 TypeScript 기반 REST API로 재구현했습니다.
 
-이 저장소는 하나의 프로젝트를 두 단계로 정리합니다.
+현재 메인 애플리케이션은 Vue 프런트엔드와 Django REST API 조합입니다.
+TypeScript API는 같은 도메인을 별도로 구현한 실험 프로젝트로 보존합니다.
 
 ```text
-08_pjt/
-├── bossprofit/              Django 기반 BOSSPROFIT MVP
+BossProfit/
+├── frontend/                Vue 3 사용자 화면
+├── bossprofit/              Django REST API 및 레거시 템플릿
 ├── boss-profit-api-ts/      TypeScript 기반 메뉴 원가 관리 API
 ├── bossprofit_dashboard.png
 ├── bossprofit_menu_detail.png
@@ -17,9 +19,9 @@
 
 ## 프로젝트 구성
 
-### 1. Django MVP
+### 1. Vue + Django 애플리케이션
 
-`bossprofit/` 폴더에 있는 기존 MVP입니다.
+`frontend/`와 `bossprofit/`을 함께 실행하는 현재 메인 애플리케이션입니다.
 
 엑셀 계산기로 검증한 메뉴 원가 계산 로직을 Django로 옮기고, 대시보드와 메뉴 상세 화면에서 결과를 확인할 수 있도록 구현했습니다.
 
@@ -32,6 +34,10 @@
 - 신호등 분류
 - Django admin을 통한 데이터 수정
 - 대시보드 및 메뉴 상세 화면 제공
+- JWT 회원가입 및 로그인
+- 메뉴·재료 CRUD
+- 사용자별 손익 가정과 계산 스냅샷
+- 수익성 추이 차트
 
 주요 파일:
 
@@ -51,6 +57,14 @@ bossprofit/
     ├── admin.py
     ├── templates/
     └── static/
+
+frontend/
+├── src/
+│   ├── api/
+│   ├── stores/
+│   ├── views/
+│   └── router/
+└── vite.config.js
 ```
 
 ### 2. TypeScript API
@@ -108,7 +122,7 @@ http://localhost:3000/api
 
 | 폴더 | 역할 |
 |---|---|
-| `bossprofit/` | Django 기반 원본 MVP. 대시보드와 계산 검증 중심 |
+| `frontend/` + `bossprofit/` | 현재 메인 앱. Vue UI, JWT 인증, Django REST API |
 | `boss-profit-api-ts/` | TypeScript 기반 서버 API. RDBMS 설계와 REST API 중심 |
 
 ## DB 설계 의도
@@ -189,22 +203,33 @@ Menu 1 --- N RecipeItem N --- 1 Ingredient
 
 ## 실행 방법
 
-### Django MVP 실행
+### 메인 애플리케이션 실행
 
-```bash
+백엔드:
+
+```powershell
 cd bossprofit
-python -m venv venv
-source venv/Scripts/activate
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_data
 python manage.py runserver
 ```
 
+프런트엔드(새 터미널):
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
 접속:
 
 ```text
-http://127.0.0.1:8000
+http://localhost:5173
+http://127.0.0.1:8000/admin/
 ```
 
 ### TypeScript API 실행
@@ -242,9 +267,14 @@ npm run dev
 완료한 부분:
 
 - 식당 메뉴 원가 관리 도메인 정의
-- Django 기반 MVP 화면 구현
+- Vue 기반 사용자 화면 및 Django REST API
 - 메뉴, 재료, 레시피 항목 모델 구성
 - 메뉴별 원가 및 마진 계산 로직 구현
+- JWT 회원가입 및 로그인
+- 메뉴·재료 CRUD와 손익 가정 수정
+- 사용자별 손익 가정 및 계산 스냅샷
+- 수익성 추이 차트
+- 핵심 API 테스트
 - TypeScript 기반 REST API 재구현
 - Prisma ORM과 SQLite 기반 관계형 DB 모델 작성
 - API 결과 확인용 HTML 화면 추가
@@ -253,9 +283,7 @@ npm run dev
 
 아직 부족한 부분:
 
-- 사용자 로그인
-- 매장별 데이터 분리
-- 사용자가 직접 메뉴와 재료를 입력하는 완성형 UI
+- 메뉴·재료 원본 데이터의 사용자·매장별 완전 분리
 - 재료 단가 변경 이력 관리
 - 외부 식재료 시세 API 연동
 - 배포

@@ -170,15 +170,41 @@ class ProfitAssumption(models.Model):
             obj = cls.objects.filter(owner=user, is_active=True).first()
             if obj:
                 return obj
+            default = cls.objects.filter(owner__isnull=True, is_active=True).first()
+            defaults = {
+                "label": default.label if default else "기본 가정",
+                "dine_in_share": default.dine_in_share if default else 0.50,
+                "delivery_share": default.delivery_share if default else 0.30,
+                "takeout_share": default.takeout_share if default else 0.20,
+                "delivery_commission_rate": (
+                    default.delivery_commission_rate if default else 0.12
+                ),
+                "rider_fee": default.rider_fee if default else 4600,
+                "rider_fee_store_share": (
+                    default.rider_fee_store_share if default else 1.0
+                ),
+                "target_food_cost_rate": (
+                    default.target_food_cost_rate if default else 0.35
+                ),
+                "is_active": True,
+            }
+            return cls.objects.create(owner=user, **defaults)
+
         obj = cls.objects.filter(owner__isnull=True, is_active=True).first()
-        if obj is None:
-            obj = cls.objects.create()
-        return obj
+        return obj or cls.objects.create()
 
 
 class MenuProfitSnapshot(models.Model):
     """계산 결과 스냅샷 (재료/가격/가정이 바뀌면 재생성)"""
 
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="profit_snapshots",
+        verbose_name="소유자",
+    )
     menu = models.ForeignKey(
         Menu, on_delete=models.CASCADE, related_name="snapshots"
     )

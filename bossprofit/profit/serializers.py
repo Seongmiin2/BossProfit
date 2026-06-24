@@ -126,6 +126,11 @@ class RecipeItemWriteSerializer(serializers.Serializer):
             raise serializers.ValidationError(f"재료 '{value}'가 존재하지 않습니다.")
         return value
 
+    def validate_quantity(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("사용량은 0보다 커야 합니다.")
+        return value
+
 
 class MenuWriteSerializer(serializers.ModelSerializer):
     """메뉴 작성용 (인라인 레시피)"""
@@ -134,6 +139,12 @@ class MenuWriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Menu
         fields = ['menu_id', 'name', 'category', 'price', 'monthly_orders', 'packaging_cost', 'is_active', 'recipe_items']
+
+    def validate_recipe_items(self, value):
+        ingredient_ids = [item["ingredient_id"] for item in value]
+        if len(ingredient_ids) != len(set(ingredient_ids)):
+            raise serializers.ValidationError("같은 재료를 중복해서 추가할 수 없습니다.")
+        return value
 
     def create(self, validated_data):
         recipe_items_data = validated_data.pop('recipe_items', [])
@@ -173,6 +184,11 @@ class IngredientWriteSerializer(serializers.ModelSerializer):
         model = Ingredient
         fields = ['ingredient_id', 'name', 'category', 'purchase_quantity', 'purchase_price', 'unit', 'memo']
 
+    def validate_purchase_quantity(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("구매 수량은 0보다 커야 합니다.")
+        return value
+
 
 class ProfitAssumptionWriteSerializer(serializers.ModelSerializer):
     """가정 작성용"""
@@ -183,3 +199,22 @@ class ProfitAssumptionWriteSerializer(serializers.ModelSerializer):
             'delivery_commission_rate', 'rider_fee', 'rider_fee_store_share',
             'target_food_cost_rate'
         ]
+
+    def validate(self, attrs):
+        instance = self.instance
+        shares = [
+            attrs.get("dine_in_share", getattr(instance, "dine_in_share", 0.50)),
+            attrs.get("delivery_share", getattr(instance, "delivery_share", 0.30)),
+            attrs.get("takeout_share", getattr(instance, "takeout_share", 0.20)),
+        ]
+        if any(share < 0 or share > 1 for share in shares):
+            raise serializers.ValidationError("판매 비중은 0과 1 사이여야 합니다.")
+        if abs(sum(shares) - 1.0) > 0.001:
+            raise serializers.ValidationError("홀·배달·포장 판매 비중의 합은 1이어야 합니다.")
+
+        rate_fields = ("delivery_commission_rate", "rider_fee_store_share", "target_food_cost_rate")
+        for field in rate_fields:
+            value = attrs.get(field, getattr(instance, field, None))
+            if value is not None and not 0 <= value <= 1:
+                raise serializers.ValidationError({field: "0과 1 사이의 값을 입력하세요."})
+        return attrs

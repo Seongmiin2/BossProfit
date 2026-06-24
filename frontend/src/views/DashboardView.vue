@@ -1,10 +1,10 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useAuthStore } from '@/stores/auth'
 import { formatKRW } from '@/utils/format'
 import SignalBadge from '@/components/SignalBadge.vue'
-import { useRouter } from 'vue-router'
 
 const dashboardStore = useDashboardStore()
 const authStore = useAuthStore()
@@ -12,331 +12,314 @@ const router = useRouter()
 
 const showAssumptionModal = ref(false)
 const assumptionForm = ref({})
+const savedMessage = ref('')
 
-onMounted(() => {
-  console.log('DashboardView mounted, loading data...')
-  dashboardStore.load()
+onMounted(() => dashboardStore.load())
+
+const healthScore = computed(() => {
+  const summary = dashboardStore.summary
+  if (!summary || !dashboardStore.snapshots.length) return 0
+  const targetRate = (dashboardStore.assumption?.target_food_cost_rate || 0.35) * 100
+  const costPenalty = Math.max(0, summary.avg_food_cost_rate - targetRate) * 2
+  const lossPenalty = (summary.delivery_loss_count / dashboardStore.snapshots.length) * 35
+  const profitBonus = summary.total_profit > 0 ? 12 : 0
+  return Math.round(Math.min(98, Math.max(18, 82 - costPenalty - lossPenalty + profitBonus)))
 })
 
-const goToDetail = (menuId) => {
-  router.push({ name: 'MenuDetail', params: { menuId } })
-}
+const healthTone = computed(() => {
+  if (healthScore.value >= 80) return { label: '아주 건강해요', className: 'good', emoji: '✨' }
+  if (healthScore.value >= 60) return { label: '조금만 다듬어요', className: 'care', emoji: '👀' }
+  return { label: '지금 관리가 필요해요', className: 'danger', emoji: '🚨' }
+})
+
+const profitRate = computed(() => {
+  const summary = dashboardStore.summary
+  if (!summary?.total_revenue) return 0
+  return (summary.total_profit / summary.total_revenue) * 100
+})
+
+const attentionMenus = computed(() =>
+  dashboardStore.snapshots
+    .filter((snap) => snap.signal_color !== 'green')
+    .sort((a, b) => a.monthly_profit - b.monthly_profit)
+    .slice(0, 3)
+)
+
+const bestMenu = computed(() =>
+  [...dashboardStore.snapshots].sort((a, b) => b.monthly_profit - a.monthly_profit)[0]
+)
+
+const primaryAction = computed(() => {
+  if (dashboardStore.summary?.delivery_loss_count > 0) {
+    return {
+      eyebrow: '오늘 먼저 볼 것',
+      title: `배달 손실 메뉴가 ${dashboardStore.summary.delivery_loss_count}개 있어요`,
+      description: '배달 가격이나 최소 주문 금액을 조정하면 수익을 지킬 수 있어요.',
+      button: '손실 메뉴 확인',
+      path: '/menus',
+      icon: '🛵',
+    }
+  }
+  return {
+    eyebrow: '오늘의 추천',
+    title: '현재 수익 구조가 안정적이에요',
+    description: '잘 팔리는 메뉴의 판매 흐름을 리포트에서 확인해보세요.',
+    button: '리포트 보기',
+    path: '/history',
+    icon: '🌱',
+  }
+})
 
 const openAssumptionModal = () => {
-  if (dashboardStore.assumption) {
-    assumptionForm.value = { ...dashboardStore.assumption }
-  }
+  assumptionForm.value = { ...dashboardStore.assumption }
+  savedMessage.value = ''
   showAssumptionModal.value = true
 }
 
 const closeAssumptionModal = () => {
   showAssumptionModal.value = false
+  savedMessage.value = ''
 }
 
 const handleAssumptionSubmit = async () => {
   try {
     await dashboardStore.updateAssumption(assumptionForm.value)
-    alert('가정 수정 완료')
-    closeAssumptionModal()
-  } catch (e) {
-    console.error(e)
+    savedMessage.value = '새 조건으로 수익을 다시 계산했어요.'
+    setTimeout(closeAssumptionModal, 900)
+  } catch {
+    savedMessage.value = ''
   }
 }
 </script>
 
 <template>
-  <div>
-    <!-- Loading state -->
-    <div v-if="dashboardStore.loading" style="text-align: center; padding: 40px;">
+  <div class="home-page">
+    <div v-if="dashboardStore.loading" class="state-card">
       <div class="spinner"></div>
-      <p>데이터 로드 중...</p>
+      <strong>가게 수익을 살펴보고 있어요</strong>
+      <p>잠시만 기다려주세요.</p>
     </div>
 
-    <!-- Error state -->
-    <div v-else-if="dashboardStore.error" style="color: var(--coral-deep); padding: 20px; background: var(--paper); border: 1px solid var(--line);">
-      ⚠️ 오류: {{ dashboardStore.error }}
+    <div v-else-if="dashboardStore.error" class="state-card state-error">
+      <span>!</span>
+      <strong>정보를 불러오지 못했어요</strong>
+      <p>{{ dashboardStore.error }}</p>
+      <button class="primary-button" @click="dashboardStore.load()">다시 시도</button>
     </div>
 
-    <!-- Success state -->
-    <div v-else-if="dashboardStore.summary">
-      <!-- Banner -->
-      <div class="banner">
-        <h1>
-          <span class="coral">BOSSPROFIT</span>
-          <br>
-          {{ dashboardStore.storeName }}
-        </h1>
-        <div class="banner-meta">
-          메뉴 <strong>{{ dashboardStore.snapshots.length }}</strong>개 · 최근 재계산
+    <template v-else-if="dashboardStore.summary">
+      <section class="welcome-row">
+        <div>
+          <p class="eyebrow">오늘의 BOSSPROFIT</p>
+          <h1>
+            {{ authStore.user?.username ? `${authStore.user.username} 사장님,` : '사장님,' }}
+            <br>
+            가게 수익을 확인해볼까요?
+          </h1>
         </div>
-      </div>
+        <button v-if="authStore.isLoggedIn" class="soft-button desktop-only" @click="dashboardStore.recalculate()">
+          ↻ 최신 정보로 계산
+        </button>
+      </section>
 
-      <!-- KPI Grid -->
-      <div class="kpi-grid">
-        <div class="kpi">
-          <div class="kpi-label">월 예상 매출</div>
-          <div class="kpi-value">{{ formatKRW(dashboardStore.summary.total_revenue) }}<span class="kpi-unit">원</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">월 예상 이익</div>
-          <div class="kpi-value coral">{{ formatKRW(dashboardStore.summary.total_profit) }}<span class="kpi-unit">원</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">평균 원가율</div>
-          <div class="kpi-value">{{ dashboardStore.summary.avg_food_cost_rate.toFixed(1) }}<span class="kpi-unit">%</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">총 주문 건수</div>
-          <div class="kpi-value">{{ dashboardStore.summary.total_orders }}<span class="kpi-unit">건</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">메뉴당 평균 판매</div>
-          <div class="kpi-value">{{ dashboardStore.summary.avg_orders.toFixed(1) }}<span class="kpi-unit">건</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-label">배달 손실 메뉴</div>
-          <div class="kpi-value red">{{ dashboardStore.summary.delivery_loss_count }}<span class="kpi-unit">개</span></div>
-        </div>
-      </div>
-
-      <!-- Insights -->
-      <div class="sect-head">
-        <span class="sect-label">핵심 인사이트</span>
-        <h2>지금 주목할 4가지</h2>
-      </div>
-      <div class="insights">
-        <div v-for="(insight, idx) in dashboardStore.insights" :key="idx" class="insight">
-          <div class="insight-text">
-            <div class="insight-label">{{ insight.label }}</div>
-            <div class="insight-comment">{{ insight.comment }}</div>
+      <section class="health-card" :class="healthTone.className">
+        <div class="health-card-top">
+          <div>
+            <span class="health-label">이번 달 수익 건강</span>
+            <h2>{{ healthTone.emoji }} {{ healthTone.label }}</h2>
+            <p>{{ dashboardStore.storeName }}의 메뉴 {{ dashboardStore.snapshots.length }}개를 분석했어요.</p>
           </div>
-          <div class="insight-value">{{ insight.value }}</div>
+          <div class="score-ring" :style="{ '--score': `${healthScore * 3.6}deg` }">
+            <div>
+              <strong>{{ healthScore }}</strong>
+              <span>점</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <!-- Snapshots Table -->
-      <div class="sect-head">
-        <span class="sect-label">신호등 분석</span>
-        <h2>메뉴별 수익성</h2>
-      </div>
-      <div class="data-table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>메뉴</th>
-              <th class="right">판매가</th>
-              <th class="right">월판매량</th>
-              <th class="right">원가율</th>
-              <th class="right">가중마진</th>
-              <th class="right">월이익</th>
-              <th>평가</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="snap in dashboardStore.snapshots" :key="snap.menu.menu_id">
-              <td class="menu-name">
-                <a @click.prevent="goToDetail(snap.menu.menu_id)" href="#" style="cursor: pointer; color: var(--ink);">
-                  {{ snap.menu.name }}
-                </a>
-                <span class="cat">{{ snap.menu.category }}</span>
-              </td>
-              <td class="right tabular">{{ formatKRW(snap.menu.price) }}</td>
-              <td class="right tabular">{{ snap.menu.monthly_orders }}</td>
-              <td class="right tabular">{{ (snap.food_cost_rate * 100).toFixed(1) }}%</td>
-              <td class="right tabular">{{ formatKRW(snap.weighted_margin) }}</td>
-              <td class="right tabular">
-                <strong :class="snap.monthly_profit >= 0 ? '' : 'cost-high'">
-                  {{ formatKRW(snap.monthly_profit) }}
-                </strong>
-              </td>
-              <td>
-                <SignalBadge :signal="snap.signal" :signal-color="snap.signal_color" />
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <div class="health-summary">
+          <div>
+            <span>예상 월이익</span>
+            <strong>{{ formatKRW(dashboardStore.summary.total_profit) }}원</strong>
+          </div>
+          <div>
+            <span>매출 대비 이익</span>
+            <strong>{{ profitRate.toFixed(1) }}%</strong>
+          </div>
+          <div>
+            <span>평균 원가율</span>
+            <strong>{{ dashboardStore.summary.avg_food_cost_rate.toFixed(1) }}%</strong>
+          </div>
+        </div>
+      </section>
 
-      <!-- Assumption Box -->
-      <div class="assumption-box">
-        <div class="title">
-          📋 현재 가정
+      <section class="action-card">
+        <div class="action-icon">{{ primaryAction.icon }}</div>
+        <div class="action-copy">
+          <span>{{ primaryAction.eyebrow }}</span>
+          <h2>{{ primaryAction.title }}</h2>
+          <p>{{ primaryAction.description }}</p>
+        </div>
+        <button class="action-button" @click="router.push(primaryAction.path)">
+          {{ primaryAction.button }} <span>→</span>
+        </button>
+      </section>
+
+      <section class="section-block">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">한눈에 보기</span>
+            <h2>이번 달 가게 숫자</h2>
+          </div>
+          <router-link to="/history">자세히 보기</router-link>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card metric-primary">
+            <span class="metric-icon">₩</span>
+            <p>예상 매출</p>
+            <strong>{{ formatKRW(dashboardStore.summary.total_revenue) }}원</strong>
+            <small>총 {{ formatKRW(dashboardStore.summary.total_orders) }}건 주문 기준</small>
+          </article>
+          <article class="metric-card">
+            <span class="metric-icon mint">✓</span>
+            <p>가장 든든한 메뉴</p>
+            <strong>{{ bestMenu?.menu.name || '-' }}</strong>
+            <small v-if="bestMenu">월이익 {{ formatKRW(bestMenu.monthly_profit) }}원</small>
+          </article>
+          <article class="metric-card">
+            <span class="metric-icon orange">!</span>
+            <p>살펴볼 메뉴</p>
+            <strong>{{ attentionMenus.length }}개</strong>
+            <small>가격과 원가를 확인해보세요</small>
+          </article>
+        </div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">BOSSPROFIT 인사이트</span>
+            <h2>숫자 속에서 찾은 이야기</h2>
+          </div>
+        </div>
+        <div class="story-list">
+          <article v-for="(insight, index) in dashboardStore.insights" :key="insight.label" class="story-card">
+            <span class="story-number">{{ String(index + 1).padStart(2, '0') }}</span>
+            <div>
+              <strong>{{ insight.label }}</strong>
+              <p>{{ insight.comment }}</p>
+            </div>
+            <b>{{ insight.value }}</b>
+          </article>
+        </div>
+      </section>
+
+      <section v-if="attentionMenus.length" class="section-block">
+        <div class="section-title-row">
+          <div>
+            <span class="section-kicker">관리 추천</span>
+            <h2>먼저 살펴보면 좋은 메뉴</h2>
+          </div>
+          <router-link to="/menus">전체 메뉴</router-link>
+        </div>
+        <div class="attention-list">
           <button
-            v-if="authStore.isLoggedIn"
-            @click="openAssumptionModal"
-            class="btn-coral"
-            style="padding: 4px 12px; font-size: 12px; float: right;"
+            v-for="snap in attentionMenus"
+            :key="snap.menu.menu_id"
+            class="attention-item"
+            @click="router.push({ name: 'MenuDetail', params: { menuId: snap.menu.menu_id } })"
           >
-            수정
+            <div class="menu-symbol">{{ snap.menu.name.charAt(0) }}</div>
+            <div class="attention-copy">
+              <strong>{{ snap.menu.name }}</strong>
+              <span>원가율 {{ (snap.food_cost_rate * 100).toFixed(1) }}% · 월 {{ snap.menu.monthly_orders }}건</span>
+            </div>
+            <SignalBadge :signal="snap.signal" :signal-color="snap.signal_color" />
+            <span class="chevron">›</span>
           </button>
         </div>
-        <div class="assumption-grid">
-          <div>
-            <strong>홀 판매 비중</strong>
-            <div>{{ (dashboardStore.assumption.dine_in_share * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>배달 판매 비중</strong>
-            <div>{{ (dashboardStore.assumption.delivery_share * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>포장 판매 비중</strong>
-            <div>{{ (dashboardStore.assumption.takeout_share * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>배달앱 수수료</strong>
-            <div>{{ (dashboardStore.assumption.delivery_commission_rate * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>배달 기사 수수료</strong>
-            <div>{{ formatKRW(dashboardStore.assumption.rider_fee) }}</div>
-          </div>
-          <div>
-            <strong>기사료 가게 부담</strong>
-            <div>{{ (dashboardStore.assumption.rider_fee_store_share * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>목표 원가율</strong>
-            <div>{{ (dashboardStore.assumption.target_food_cost_rate * 100).toFixed(0) }}%</div>
-          </div>
-          <div>
-            <strong>가정 이름</strong>
-            <div>{{ dashboardStore.assumption.label }}</div>
-          </div>
+      </section>
+
+      <section class="store-settings-card">
+        <div>
+          <span class="section-kicker">계산 기준</span>
+          <h2>{{ dashboardStore.assumption?.label }}</h2>
+          <p>
+            홀 {{ Math.round((dashboardStore.assumption?.dine_in_share || 0) * 100) }}% ·
+            배달 {{ Math.round((dashboardStore.assumption?.delivery_share || 0) * 100) }}% ·
+            포장 {{ Math.round((dashboardStore.assumption?.takeout_share || 0) * 100) }}%
+          </p>
         </div>
-      </div>
+        <button v-if="authStore.isLoggedIn" class="soft-button" @click="openAssumptionModal">조건 바꾸기</button>
+      </section>
+    </template>
+
+    <div v-else class="state-card">
+      <strong>아직 분석할 데이터가 없어요</strong>
+      <p>메뉴와 재료를 추가하면 수익 상태를 알려드릴게요.</p>
+      <button class="primary-button" @click="router.push('/menus')">메뉴 확인하기</button>
     </div>
 
-    <!-- No data -->
-    <div v-else style="text-align: center; padding: 40px;">
-      <p>데이터가 없습니다.</p>
-    </div>
-
-    <!-- Assumption Modal -->
-    <div v-if="showAssumptionModal" style="position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-      <div style="background: white; padding: 32px; border-radius: 8px; max-width: 600px; width: 90%;">
-        <h2 style="margin-bottom: 24px;">가정 수정</h2>
+    <div v-if="showAssumptionModal" class="modal-backdrop" @click.self="closeAssumptionModal">
+      <div class="app-modal">
+        <div class="modal-handle"></div>
+        <div class="modal-head">
+          <div>
+            <span class="section-kicker">내 매장 설정</span>
+            <h2>수익 계산 조건</h2>
+          </div>
+          <button class="modal-close" @click="closeAssumptionModal">×</button>
+        </div>
 
         <form @submit.prevent="handleAssumptionSubmit">
-          <!-- 가정 이름 -->
-          <div class="mb-3">
-            <label class="form-label">가정 이름</label>
-            <input v-model="assumptionForm.label" type="text" class="form-control" />
-          </div>
+          <label class="field">
+            <span>설정 이름</span>
+            <input v-model="assumptionForm.label" type="text">
+          </label>
 
-          <!-- 판매 비중 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label class="form-label">홀 판매 비중</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.dine_in_share"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.dine_in_share * 100).toFixed(0) }}%</span>
-              </div>
-            </div>
-            <div>
-              <label class="form-label">배달 판매 비중</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.delivery_share"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.delivery_share * 100).toFixed(0) }}%</span>
-              </div>
-            </div>
-            <div>
-              <label class="form-label">포장 판매 비중</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.takeout_share"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.takeout_share * 100).toFixed(0) }}%</span>
-              </div>
+          <div class="form-section">
+            <strong>판매 비중</strong>
+            <p>세 항목의 합이 100%가 되도록 입력해주세요.</p>
+            <div class="share-grid">
+              <label class="field compact">
+                <span>홀</span>
+                <div><input v-model.number="assumptionForm.dine_in_share" type="number" step="0.01" min="0" max="1"><b>비율</b></div>
+              </label>
+              <label class="field compact">
+                <span>배달</span>
+                <div><input v-model.number="assumptionForm.delivery_share" type="number" step="0.01" min="0" max="1"><b>비율</b></div>
+              </label>
+              <label class="field compact">
+                <span>포장</span>
+                <div><input v-model.number="assumptionForm.takeout_share" type="number" step="0.01" min="0" max="1"><b>비율</b></div>
+              </label>
             </div>
           </div>
 
-          <!-- 배달 조건 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label class="form-label">배달앱 수수료율</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.delivery_commission_rate"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.delivery_commission_rate * 100).toFixed(0) }}%</span>
-              </div>
-            </div>
-            <div>
-              <label class="form-label">배달 기사 수수료</label>
-              <input
-                v-model.number="assumptionForm.rider_fee"
-                type="number"
-                class="form-control"
-              />
-            </div>
+          <div class="two-column-fields">
+            <label class="field">
+              <span>배달앱 수수료율</span>
+              <input v-model.number="assumptionForm.delivery_commission_rate" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label class="field">
+              <span>배달 기사 수수료</span>
+              <input v-model.number="assumptionForm.rider_fee" type="number" min="0">
+            </label>
+            <label class="field">
+              <span>기사료 가게 부담률</span>
+              <input v-model.number="assumptionForm.rider_fee_store_share" type="number" step="0.01" min="0" max="1">
+            </label>
+            <label class="field">
+              <span>목표 원가율</span>
+              <input v-model.number="assumptionForm.target_food_cost_rate" type="number" step="0.01" min="0" max="1">
+            </label>
           </div>
 
-          <!-- 기타 -->
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-            <div>
-              <label class="form-label">기사료 가게 부담률</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.rider_fee_store_share"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.rider_fee_store_share * 100).toFixed(0) }}%</span>
-              </div>
-            </div>
-            <div>
-              <label class="form-label">목표 원가율</label>
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input
-                  v-model.number="assumptionForm.target_food_cost_rate"
-                  type="number"
-                  class="form-control"
-                  step="0.01"
-                  min="0"
-                  max="1"
-                />
-                <span style="white-space: nowrap;">{{ (assumptionForm.target_food_cost_rate * 100).toFixed(0) }}%</span>
-              </div>
-            </div>
-          </div>
+          <p v-if="dashboardStore.error" class="form-error">{{ dashboardStore.error }}</p>
+          <p v-if="savedMessage" class="form-success">{{ savedMessage }}</p>
 
-          <!-- 버튼 -->
-          <div style="display: flex; gap: 12px; margin-top: 24px;">
-            <button type="submit" class="btn-coral" style="flex: 1; padding: 10px; font-weight: 700;">
-              수정하기
-            </button>
-            <button type="button" class="btn" style="flex: 1; padding: 10px;" @click="closeAssumptionModal">
-              취소
-            </button>
-          </div>
+          <button type="submit" class="primary-button full-button">저장하고 다시 계산하기</button>
         </form>
       </div>
     </div>

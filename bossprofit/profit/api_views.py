@@ -5,9 +5,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from django.db.models.deletion import ProtectedError
 from django.db.models import Sum, Avg
 from django.db.models.functions import TruncDate
-from datetime import datetime, timedelta
+from django.utils import timezone
+from datetime import timedelta
 
 from .models import Menu, Ingredient, ProfitAssumption, MenuProfitSnapshot
 from .calculator import (
@@ -16,7 +18,7 @@ from .calculator import (
     get_latest_snapshots,
     recalculate_all,
 )
-from .views import _bucket_by_signal, _build_insights
+from .views import _build_insights
 from .serializers import (
     MenuProfitSnapshotSerializer,
     ProfitAssumptionSerializer,
@@ -27,15 +29,20 @@ from .serializers import (
 )
 
 
+def _recalculate_for_user(request):
+    assumption = ProfitAssumption.get_active(user=request.user)
+    return recalculate_all(assumption=assumption)
+
+
 @api_view(['GET'])
 def api_dashboard(request):
     """
     대시보드: KPI + 스냅샷 + 인사이트
     """
-    snapshots = get_latest_snapshots()
+    user = request.user if request.user.is_authenticated else None
+    snapshots = get_latest_snapshots(user=user)
     summary = dashboard_summary(snapshots)
     insights = _build_insights(snapshots)
-    user = request.user if request.user.is_authenticated else None
     assumption = ProfitAssumption.get_active(user=user)
 
     # 정렬: 신호 우선순위 + monthly_orders 내림차순
@@ -65,7 +72,8 @@ def api_menu_list(request):
     """
     메뉴 목록: 스냅샷 리스트
     """
-    snapshots = get_latest_snapshots()
+    user = request.user if request.user.is_authenticated else None
+    snapshots = get_latest_snapshots(user=user)
     return Response(MenuProfitSnapshotSerializer(snapshots, many=True).data)
 
 
@@ -92,6 +100,7 @@ def api_menu_detail(request, menu_id):
             "unit_cost": item.ingredient.unit_cost,
             "cost": item.cost,
             "share": (item.cost / total_cost * 100) if total_cost else 0,
+            "memo": item.memo,
         })
     recipe_rows.sort(key=lambda r: r["cost"], reverse=True)
 
@@ -114,11 +123,12 @@ def api_menu_detail(request, menu_id):
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def api_recalculate(request):
     """
     전체 메뉴 재계산
     """
-    snaps = recalculate_all()
+    snaps = _recalculate_for_user(request)
     return Response({
         "message": f"메뉴 {len(snaps)}개 재계산 완료",
         "count": len(snaps),
@@ -134,6 +144,7 @@ def api_menu_create(request):
     serializer = MenuWriteSerializer(data=request.data)
     if serializer.is_valid():
         menu = serializer.save()
+        _recalculate_for_user(request)
         return Response({"menu_id": menu.menu_id, "name": menu.name}, status=201)
     return Response(serializer.errors, status=400)
 
@@ -146,6 +157,7 @@ def api_menu_update(request, menu_id):
     serializer = MenuWriteSerializer(menu, data=request.data, partial=True)
     if serializer.is_valid():
         menu = serializer.save()
+        _recalculate_for_user(request)
         return Response({"menu_id": menu.menu_id, "name": menu.name})
     return Response(serializer.errors, status=400)
 
@@ -155,8 +167,10 @@ def api_menu_update(request, menu_id):
 def api_menu_delete(request, menu_id):
     """메뉴 삭제"""
     menu = get_object_or_404(Menu, menu_id=menu_id)
+    menu_name = menu.name
     menu.delete()
-    return Response({"message": f"메뉴 '{menu.name}' 삭제 완료"})
+    _recalculate_for_user(request)
+    return Response({"message": f"메뉴 '{menu_name}' 삭제 완료"})
 
 
 # ===== Ingredient CRUD =====
@@ -176,6 +190,7 @@ def api_ingredient_create(request):
     serializer = IngredientWriteSerializer(data=request.data)
     if serializer.is_valid():
         ingredient = serializer.save()
+        _recalculate_for_user(request)
         return Response({"ingredient_id": ingredient.ingredient_id, "name": ingredient.name}, status=201)
     return Response(serializer.errors, status=400)
 
@@ -188,6 +203,7 @@ def api_ingredient_update(request, ingredient_id):
     serializer = IngredientWriteSerializer(ingredient, data=request.data, partial=True)
     if serializer.is_valid():
         ingredient = serializer.save()
+        _recalculate_for_user(request)
         return Response({"ingredient_id": ingredient.ingredient_id, "name": ingredient.name})
     return Response(serializer.errors, status=400)
 
@@ -197,8 +213,16 @@ def api_ingredient_update(request, ingredient_id):
 def api_ingredient_delete(request, ingredient_id):
     """재료 삭제"""
     ingredient = get_object_or_404(Ingredient, ingredient_id=ingredient_id)
-    ingredient.delete()
-    return Response({"message": f"재료 '{ingredient.name}' 삭제 완료"})
+    ingredient_name = ingredient.name
+    try:
+        ingredient.delete()
+    except ProtectedError:
+        return Response(
+            {"detail": "레시피에서 사용 중인 재료는 삭제할 수 없습니다."},
+            status=409,
+        )
+    _recalculate_for_user(request)
+    return Response({"message": f"재료 '{ingredient_name}' 삭제 완료"})
 
 
 # ===== Assumption CRUD =====
@@ -211,7 +235,12 @@ def api_assumption_update(request):
     serializer = ProfitAssumptionWriteSerializer(assumption, data=request.data, partial=True)
     if serializer.is_valid():
         assumption = serializer.save()
-        return Response({"label": assumption.label, "message": "가정 수정 완료"})
+        snaps = recalculate_all(assumption=assumption)
+        return Response({
+            "label": assumption.label,
+            "message": "가정 수정 및 재계산 완료",
+            "count": len(snaps),
+        })
     return Response(serializer.errors, status=400)
 
 
@@ -228,16 +257,21 @@ def api_history(request):
         days = int(days)
     except ValueError:
         days = 30
+    days = min(max(days, 1), 365)
 
     # 기간 계산
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=days)
+    end_date = timezone.localdate()
+    start_date = end_date - timedelta(days=days - 1)
 
     # 쿼리셋
     snapshots = MenuProfitSnapshot.objects.filter(
         created_at__date__gte=start_date,
         created_at__date__lte=end_date
     )
+    if request.user.is_authenticated:
+        snapshots = snapshots.filter(owner=request.user)
+    else:
+        snapshots = snapshots.filter(owner__isnull=True)
 
     if menu_id:
         snapshots = snapshots.filter(menu__menu_id=menu_id)
@@ -249,7 +283,6 @@ def api_history(request):
         total_profit=Sum('monthly_profit'),
         total_revenue=Sum('monthly_revenue'),
         avg_food_cost_rate=Avg('food_cost_rate'),
-        menu_count=Sum('menu_id')  # 개수 세기 위한 더미
     ).order_by('date')
 
     # 응답 포맷

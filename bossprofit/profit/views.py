@@ -8,6 +8,7 @@ URL 구성:
   /recalculate/      → POST로 재계산 트리거
 """
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.http import HttpResponseRedirect
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
@@ -159,6 +160,7 @@ def menu_detail(request, menu_id):
 
 
 @require_POST
+@staff_member_required
 def recalculate(request):
     snaps = recalculate_all()
     messages.success(request, f"✓ 메뉴 {len(snaps)}개 재계산 완료")
