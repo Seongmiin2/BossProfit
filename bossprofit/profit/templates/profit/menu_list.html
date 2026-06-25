@@ -1,0 +1,47 @@
+{% extends "profit/base.html" %}
+{% load humanize %}
+
+{% block title %}메뉴 전체 - BOSSPROFIT{% endblock %}
+
+{% block content %}
+
+<div style="margin-bottom: 32px;">
+  <h1 style="font-family:'Noto Serif KR',serif; font-size:32px; font-weight:900;">메뉴 전체</h1>
+  <p style="color:var(--ink-soft); margin-top:4px;">총 {{ snapshots|length }}개 메뉴 · 클릭하면 레시피 단위까지 들어갑니다.</p>
+</div>
+
+<div class="menu-grid">
+  {% for s in snapshots %}
+  <a href="{% url 'menu_detail' s.menu.menu_id %}" class="menu-card">
+    <div class="menu-card-head">
+      <div>
+        <div class="menu-card-name">{{ s.menu.name }}</div>
+        <div class="menu-card-meta">{{ s.menu.category }} · {{ s.menu.menu_id }}</div>
+      </div>
+      <span class="signal signal-{{ s.signal_color }}">{{ s.signal }}</span>
+    </div>
+    <div class="menu-card-grid">
+      <div>
+        <div class="label">월 판매</div>
+        <div class="val">{{ s.menu.monthly_orders }}건</div>
+      </div>
+      <div>
+        <div class="label">판매가</div>
+        <div class="val">{{ s.menu.price|intcomma }}원</div>
+      </div>
+      <div>
+        <div class="label">원가율</div>
+        <div class="val {% if s.food_cost_rate > 0.40 %}cost-high{% elif s.food_cost_rate > 0.35 %}cost-mid{% else %}cost-low{% endif %}">
+          {{ s.food_cost_rate|floatformat:3 }}
+        </div>
+      </div>
+      <div>
+        <div class="label">월 이익</div>
+        <div class="val coral">{{ s.monthly_profit|floatformat:0|intcomma }}원</div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+
+{% endblock %}

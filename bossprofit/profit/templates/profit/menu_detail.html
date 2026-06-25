@@ -1,0 +1,92 @@
+{% extends "profit/base.html" %}
+{% load humanize %}
+
+{% block title %}{{ menu.name }} - BOSSPROFIT{% endblock %}
+
+{% block content %}
+
+<header class="detail-header">
+  <a href="{% url 'menu_list' %}" class="breadcrumb">← 메뉴 전체</a>
+  <div class="tag">{{ menu.category|upper }} · {{ menu.menu_id }}</div>
+  <h1>{{ menu.name }}</h1>
+  <div class="sub">{{ menu.price|intcomma }}원 · 월 {{ menu.monthly_orders }}건 판매</div>
+</header>
+
+<div class="margin-grid">
+  <div class="margin-card">
+    <div class="lbl">홀 마진</div>
+    <div class="val {% if result.dine_in_margin > 0 %}pos{% else %}neg{% endif %}">
+      {{ result.dine_in_margin|floatformat:0|intcomma }}<span class="unit">원</span>
+    </div>
+    <div class="note">판매가 - 재료원가</div>
+  </div>
+  <div class="margin-card">
+    <div class="lbl">포장 마진</div>
+    <div class="val {% if result.takeout_margin > 0 %}pos{% else %}neg{% endif %}">
+      {{ result.takeout_margin|floatformat:0|intcomma }}<span class="unit">원</span>
+    </div>
+    <div class="note">홀 마진 - 포장비 {{ menu.packaging_cost|intcomma }}원</div>
+  </div>
+  <div class="margin-card">
+    <div class="lbl">배달 마진</div>
+    <div class="val {% if result.delivery_margin > 0 %}pos{% else %}neg{% endif %}">
+      {{ result.delivery_margin|floatformat:0|intcomma }}<span class="unit">원</span>
+    </div>
+    <div class="note">- 수수료 {{ result.delivery_commission|floatformat:0|intcomma }}원 - 기사료 {{ result.rider_cost|floatformat:0|intcomma }}원</div>
+  </div>
+</div>
+
+<div class="weighted-banner">
+  <div>
+    <div class="lbl-coral">가중 평균 마진 (홀 {{ assumption.dine_in_share|floatformat:2 }} · 배달 {{ assumption.delivery_share|floatformat:2 }} · 포장 {{ assumption.takeout_share|floatformat:2 }})</div>
+    <div class="big coral">{{ result.weighted_margin|floatformat:0|intcomma }}원</div>
+  </div>
+  <div>
+    <div class="lbl-grey">월 예상 이익 ({{ menu.monthly_orders }}건 기준)</div>
+    <div class="big">{{ result.monthly_profit|floatformat:0|intcomma }}원</div>
+  </div>
+</div>
+
+<div style="margin-bottom: 16px;">
+  <h2 style="font-family:'Noto Serif KR',serif; font-size:24px; font-weight:900;">레시피 분해</h2>
+  <div class="sect-label">RECIPE · BREAKDOWN · 재료원가 {{ result.base_cost|floatformat:0|intcomma }}원 (원가율 {{ result.food_cost_rate|floatformat:3 }})</div>
+</div>
+
+<div class="data-table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>재료</th>
+        <th class="right">사용량</th>
+        <th class="right">단가</th>
+        <th class="right">원가</th>
+        <th style="width:33%;">원가 비중</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recipe_rows %}
+      <tr>
+        <td style="font-weight:500;">{{ r.ingredient.name }}</td>
+        <td class="right tabular">{{ r.quantity|floatformat:"-2" }}{{ r.ingredient.unit }}</td>
+        <td class="right tabular" style="color:var(--ink-muted);">{{ r.ingredient.unit_cost|floatformat:2 }}원/{{ r.ingredient.unit }}</td>
+        <td class="right tabular" style="font-weight:500;">{{ r.cost|floatformat:0|intcomma }}원</td>
+        <td>
+          <div class="recipe-bar">
+            <div class="fill" style="width: {{ r.share|floatformat:1 }}%;"></div>
+            <div class="pct">{{ r.share|floatformat:1 }}%</div>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      <tr style="background: var(--cream-deep); font-weight:700;">
+        <td>합계</td>
+        <td></td>
+        <td></td>
+        <td class="right tabular">{{ result.base_cost|floatformat:0|intcomma }}원</td>
+        <td style="font-size:12px; color:var(--ink-soft);">판매가 대비 {{ result.food_cost_rate|floatformat:3 }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

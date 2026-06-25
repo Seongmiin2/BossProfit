@@ -1,0 +1,11 @@
+{
+  "133": [
+    {"observed_date": "2026-06-15", "variables": {"tavg": 23.1, "tmin": 18.0, "tmax": 28.4, "rain": 0.0, "humidity": 62, "sunshine": 9.1}, "raw_ref": "asos:133:2026-06-15"},
+    {"observed_date": "2026-06-16", "variables": {"tavg": 24.0, "tmin": 19.1, "tmax": 29.0, "rain": 2.5, "humidity": 70, "sunshine": 6.4}, "raw_ref": "asos:133:2026-06-16"},
+    {"observed_date": "2026-06-17", "variables": {"tavg": 26.8, "tmin": 21.0, "tmax": 33.2, "rain": 0.0, "humidity": 55, "sunshine": 11.0}, "raw_ref": "asos:133:2026-06-17"}
+  ],
+  "159": [
+    {"observed_date": "2026-06-15", "variables": {"tavg": 22.0, "tmin": 17.5, "tmax": 27.0, "rain": 12.0, "humidity": 80, "sunshine": 3.2}, "raw_ref": "asos:159:2026-06-15"},
+    {"observed_date": "2026-06-16", "variables": {"tavg": 21.5, "tmin": 17.0, "tmax": 26.1, "rain": 30.5, "humidity": 88, "sunshine": 1.0}, "raw_ref": "asos:159:2026-06-16"}
+  ]
+}

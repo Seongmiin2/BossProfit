@@ -1,0 +1,50 @@
+{% load static humanize %}<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}BOSSPROFIT{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Noto+Serif+KR:wght@600;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'profit/styles.css' %}">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a href="{% url 'dashboard' %}" style="display:flex; align-items:baseline;">
+      <span class="brand">BOSSPROFIT</span>
+      <span class="brand-tag">MVP · 1주차</span>
+    </a>
+    <nav class="nav">
+      <a href="{% url 'dashboard' %}">대시보드</a>
+      <a href="{% url 'menu_list' %}">메뉴</a>
+      <a href="/admin/">관리자</a>
+      <form action="{% url 'recalculate' %}" method="post" style="margin-left:8px;">
+        {% csrf_token %}
+        <button class="btn-coral">⟳ 재계산</button>
+      </form>
+    </nav>
+  </div>
+</header>
+
+{% if messages %}
+<div style="max-width: 1240px; margin: 0 auto; padding: 16px 24px 0;">
+  {% for m in messages %}
+  <div class="message">{{ m }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+  BOSSPROFIT · 1주차 MVP · Django
+</footer>
+
+</body>
+</html>

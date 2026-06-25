@@ -1,0 +1,15 @@
+{
+  "245": [
+    {"observation_date": "2026-06-15", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "2.10", "raw_ref": "kamis:245:2026-06-15"},
+    {"observation_date": "2026-06-16", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "2.15", "raw_ref": "kamis:245:2026-06-16"},
+    {"observation_date": "2026-06-17", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "2.20", "raw_ref": "kamis:245:2026-06-17"},
+    {"observation_date": "2026-06-18", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "3.80", "raw_ref": "kamis:245:2026-06-18"},
+    {"observation_date": "2026-06-19", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "3.90", "raw_ref": "kamis:245:2026-06-19"},
+    {"observation_date": "2026-06-20", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "0", "raw_ref": "kamis:245:2026-06-20"}
+  ],
+  "211": [
+    {"observation_date": "2026-06-15", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "1.05", "raw_ref": "kamis:211:2026-06-15"},
+    {"observation_date": "2026-06-16", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "1.08", "raw_ref": "kamis:211:2026-06-16"},
+    {"observation_date": "2026-06-17", "region": "서울", "market_type": "retail", "grade": "상", "unit": "g", "price": "1.10", "raw_ref": "kamis:211:2026-06-17"}
+  ]
+}

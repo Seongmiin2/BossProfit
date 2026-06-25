@@ -1,0 +1,12 @@
+{
+  "245": [
+    {"observation_date": "2026-06-15", "market": "가락시장", "origin": "전남", "grade": "상", "unit": "g", "price": "1.95", "volume": "120000", "raw_ref": "ws:245:2026-06-15"},
+    {"observation_date": "2026-06-16", "market": "가락시장", "origin": "전남", "grade": "상", "unit": "g", "price": "2.00", "volume": "98000", "raw_ref": "ws:245:2026-06-16"},
+    {"observation_date": "2026-06-17", "market": "가락시장", "origin": "전남", "grade": "상", "unit": "g", "price": "2.05", "volume": "60000", "raw_ref": "ws:245:2026-06-17"},
+    {"observation_date": "2026-06-18", "market": "가락시장", "origin": "전남", "grade": "상", "unit": "g", "price": "3.40", "volume": "31000", "raw_ref": "ws:245:2026-06-18"}
+  ],
+  "211": [
+    {"observation_date": "2026-06-15", "market": "가락시장", "origin": "강원", "grade": "상", "unit": "g", "price": "0.95", "volume": "210000", "raw_ref": "ws:211:2026-06-15"},
+    {"observation_date": "2026-06-16", "market": "가락시장", "origin": "강원", "grade": "상", "unit": "g", "price": "0.98", "volume": "205000", "raw_ref": "ws:211:2026-06-16"}
+  ]
+}
