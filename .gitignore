@@ -14,3 +14,7 @@ db.sqlite3
 *.db
 
 generated/
+
+# 로컬 비밀값 (인증키)
+local_settings.py
+**/local_settings.py

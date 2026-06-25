@@ -117,6 +117,11 @@ import os
 KAMIS_CERT_KEY = os.environ.get("KAMIS_CERT_KEY", "")
 KAMIS_CERT_ID = os.environ.get("KAMIS_CERT_ID", "")
 
+# 공공데이터포털(data.go.kr) 통합 인증키. 기상청 ASOS/단기·중기예보, 농업기상,
+# 전국 공영도매시장 경매 등 data.go.kr 계열 서비스가 공유한다.
+# 비어 있으면 해당 ingestion은 fixture로 동작한다.
+DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY", "")
+
 # 식자재(ingredient_id 또는 name) → KAMIS 품목 매핑.
 #   category_code: 부류코드 (100 식량작물 / 200 채소류 / 300 특용작물 /
 #                  400 과일류 / 500 축산물 / 600 수산물)  -- 필수
@@ -131,4 +136,17 @@ KAMIS_CERT_ID = os.environ.get("KAMIS_CERT_ID", "")
 #       "PORK_LOIN_G": {"category_code": "500", "item_code": "514",
 #                       "kind_code": "01", "unit_factor": 1.0},
 #   }
-KAMIS_ITEM_MAP = {}
+# 우동·돈까스 매장 채소 품목 매핑(KAMIS 채소 부류 200). convert_kg_yn=Y → 1kg 환산가.
+# unit_factor = 식자재 구매수량(g)/1000 (1kg 단가를 구매수량 기준 금액으로 환산).
+KAMIS_ITEM_MAP = {
+    # 양파: 구매 3000g → 1kg 단가 × 3
+    "ONION_G": {"category_code": "200", "item_code": "245", "unit_factor": 3.0},
+    # 양배추: 구매 1000g → 1kg(≈1포기) 단가 × 1
+    "CABBAGE_G": {"category_code": "200", "item_code": "212", "unit_factor": 1.0},
+}
+
+# 로컬 비밀값(인증키 등)은 gitignore된 local_settings.py 에서 덮어쓴다.
+try:
+    from .local_settings import *  # noqa: F401,F403
+except ImportError:
+    pass

@@ -10,7 +10,11 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Iterable, Optional
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -43,6 +47,100 @@ class FixtureAsosClient(BaseAsosClient):
     def fetch(self, station, start, end):
         rows = self._data.get(station.station_id, [])
         return [r for r in rows if start <= date.fromisoformat(r["observed_date"]) <= end]
+
+
+def _f(v):
+    """ASOS 숫자 필드 파싱. 빈값/'-'는 None."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if not s or s == "-":
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+class RealAsosClient(BaseAsosClient):
+    """기상청 ASOS 일자료(공공데이터포털) 실연동 클라이언트.
+
+    settings.DATA_GO_KR_API_KEY 가 필요하다. https + 브라우저 UA 로 호출하고,
+    응답(response.body.items.item[])을 forecast 파이프라인이 읽는 변수명으로 정규화한다.
+    """
+
+    BASE_URL = "https://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList"
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    )
+    # ASOS 응답 필드 → forecast WEATHER_VARS
+    FIELD_MAP = {
+        "avgTa": "tavg", "minTa": "tmin", "maxTa": "tmax",
+        "sumRn": "rain", "avgRhm": "humidity", "sumSsHr": "sunshine",
+    }
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or getattr(settings, "DATA_GO_KR_API_KEY", "")
+
+    def fetch(self, station, start: date, end: date) -> list[dict]:
+        if not self.api_key:
+            return []
+        params = {
+            "serviceKey": self.api_key,
+            "dataType": "JSON",
+            "dataCd": "ASOS",
+            "dateCd": "DAY",
+            "startDt": start.strftime("%Y%m%d"),
+            "endDt": end.strftime("%Y%m%d"),
+            "stnIds": station.station_id,
+            "numOfRows": "999",
+            "pageNo": "1",
+        }
+        url = f"{self.BASE_URL}?{urlencode(params)}"
+        req = Request(url, headers={"User-Agent": self.USER_AGENT})
+        try:
+            with urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (URLError, ValueError, TimeoutError, OSError):
+            return []
+
+        try:
+            header = payload["response"]["header"]
+            if header.get("resultCode") not in ("00", 0):
+                return []
+            items = payload["response"]["body"]["items"]["item"]
+        except (KeyError, TypeError):
+            return []
+        if isinstance(items, dict):
+            items = [items]
+
+        out = []
+        for it in items:
+            tm = it.get("tm")
+            if not tm:
+                continue
+            variables = {}
+            for src, dst in self.FIELD_MAP.items():
+                v = _f(it.get(src))
+                # 강수량 빈값은 무강수(0)로 본다(ASOS는 무강수일 sumRn을 비워둠)
+                if v is None and dst == "rain" and str(it.get(src, "")).strip() == "":
+                    v = 0.0
+                if v is not None:
+                    variables[dst] = v
+            out.append({
+                "observed_date": tm,
+                "variables": variables,
+                "raw_ref": f"asos:{station.station_id}:{tm}",
+            })
+        return out
+
+
+def get_asos_client() -> BaseAsosClient:
+    """키가 있으면 실 ASOS API, 없으면 fixture."""
+    if getattr(settings, "DATA_GO_KR_API_KEY", ""):
+        return RealAsosClient()
+    return FixtureAsosClient()
 
 
 @transaction.atomic

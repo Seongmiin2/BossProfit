@@ -10,13 +10,16 @@ from django.utils import timezone
 
 from weather.models import WeatherStation
 from weather.ingestion.service import (
-    FixtureAsosClient, FixtureForecastClient,
+    FixtureForecastClient, get_asos_client,
     ingest_weather_observations, ingest_forecast_snapshots,
 )
 
 DEMO_STATIONS = [
     dict(station_id="133", name="대전", source="asos", latitude=36.37, longitude=127.37),
     dict(station_id="159", name="부산", source="asos", latitude=35.10, longitude=129.03),
+    # 양파·배추 주산지 관측소
+    dict(station_id="165", name="목포", source="asos", latitude=34.82, longitude=126.38),
+    dict(station_id="105", name="강릉", source="asos", latitude=37.75, longitude=128.89),
 ]
 
 
@@ -39,7 +42,9 @@ class Command(BaseCommand):
         end = date.fromisoformat(opts["end"]) if opts["end"] else timezone.localdate()
         start = date.fromisoformat(opts["start"]) if opts["start"] else end - timedelta(days=opts["days"])
 
-        run = ingest_weather_observations(start=start, end=end, client=FixtureAsosClient())
+        client = get_asos_client()
+        self.stdout.write(f"ASOS 클라이언트: {type(client).__name__} / {start} ~ {end}")
+        run = ingest_weather_observations(start=start, end=end, client=client)
         self.stdout.write(self.style.SUCCESS(
             f"[관측 {run.status}] fetched={run.fetched_count} created={run.created_count} "
             f"updated={run.updated_count}"

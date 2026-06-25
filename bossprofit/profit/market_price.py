@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from urllib.parse import urlencode
 from urllib.request import urlopen, Request
@@ -108,11 +108,11 @@ class KamisMarketPriceProvider(MarketPriceProvider):
             params["p_kind_code"] = mapping["kind_code"]
         return params
 
-    def fetch_price(self, ingredient: Ingredient, as_of: date) -> Optional[int]:
-        mapping = self.item_map.get(ingredient.ingredient_id) or self.item_map.get(ingredient.name)
-        if not mapping or not mapping.get("category_code"):
-            return None
+    # KAMIS 일별 가격은 1~2일 지연·휴장이 있어 조회일에 데이터가 없을 수 있다.
+    # 요청일부터 최대 LOOKBACK_DAYS 일 되짚어 가장 최근 가용 가격을 사용한다.
+    LOOKBACK_DAYS = 7
 
+    def _fetch_one(self, mapping: dict, as_of: date) -> Optional[float]:
         url = f"{self.BASE_URL}?{urlencode(self.build_params(mapping, as_of))}"
         req = Request(url, headers={"User-Agent": self.USER_AGENT})
         try:
@@ -120,12 +120,22 @@ class KamisMarketPriceProvider(MarketPriceProvider):
                 payload = json.loads(resp.read().decode("utf-8"))
         except (URLError, ValueError, TimeoutError, OSError):
             return None
-
-        price = _extract_kamis_price(
+        return _extract_kamis_price(
             payload,
             item_code=mapping.get("item_code"),
             kind_code=mapping.get("kind_code"),
         )
+
+    def fetch_price(self, ingredient: Ingredient, as_of: date) -> Optional[int]:
+        mapping = self.item_map.get(ingredient.ingredient_id) or self.item_map.get(ingredient.name)
+        if not mapping or not mapping.get("category_code"):
+            return None
+
+        price = None
+        for back in range(self.LOOKBACK_DAYS + 1):
+            price = self._fetch_one(mapping, as_of - timedelta(days=back))
+            if price is not None:
+                break
         if price is None:
             return None
         # KAMIS 가격 단위(예: 1kg)를 식자재 purchase_quantity 기준으로 환산하는 계수.
