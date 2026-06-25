@@ -387,11 +387,97 @@ class RealForecastClient(BaseForecastClient):
         return out
 
 
+class RealMidForecastClient(BaseForecastClient):
+    """기상청 중기기온예보(getMidTa) 실연동. 4~10일 후 일 최저/최고기온.
+
+    단기예보(1~3일)와 같은 WeatherForecastSnapshot에 적재되어,
+    load_item_forecast_weather → 충격감지에서 긴 horizon까지 미래 기상이 반영된다.
+    """
+
+    source = "kma_mid"
+    BASE_URL = "https://apis.data.go.kr/1360000/MidFcstInfoService/getMidTa"
+    USER_AGENT = RealForecastClient.USER_AGENT
+    # 관측소 → 중기기온 예보구역 코드
+    STATION_REGID = {
+        "105": "11D20501",  # 강릉
+        "133": "11C20401",  # 대전
+        "159": "11H20201",  # 부산
+        "165": "21F20801",  # 목포
+    }
+
+    def __init__(self, api_key: Optional[str] = None, base_date: Optional[date] = None):
+        self.api_key = api_key or getattr(settings, "DATA_GO_KR_API_KEY", "")
+        self.base_date = base_date or timezone.localdate()
+        self.tm_fc = self.base_date.strftime("%Y%m%d") + "0600"
+
+    def _fetch_station(self, station) -> list[dict]:
+        regid = self.STATION_REGID.get(station.station_id)
+        if not regid:
+            return []
+        params = {
+            "serviceKey": self.api_key, "dataType": "JSON",
+            "numOfRows": "10", "pageNo": "1", "regId": regid, "tmFc": self.tm_fc,
+        }
+        url = f"{self.BASE_URL}?{urlencode(params)}"
+        req = Request(url, headers={"User-Agent": self.USER_AGENT})
+        try:
+            with urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (URLError, ValueError, TimeoutError, OSError):
+            return []
+        try:
+            if payload["response"]["header"].get("resultCode") not in ("00", 0):
+                return []
+            it = payload["response"]["body"]["items"]["item"][0]
+        except (KeyError, TypeError, IndexError):
+            return []
+
+        issued_at = datetime.combine(self.base_date, datetime.min.time().replace(hour=6))
+        rows = []
+        for n in range(4, 11):  # 4~10일 후
+            tmin = _f(it.get(f"taMin{n}"))
+            tmax = _f(it.get(f"taMax{n}"))
+            if tmin is None and tmax is None:
+                continue
+            variables = {}
+            if tmin is not None:
+                variables["tmin"] = tmin
+            if tmax is not None:
+                variables["tmax"] = tmax
+            if tmin is not None and tmax is not None:
+                variables["tavg"] = round((tmin + tmax) / 2, 1)
+            valid = self.base_date + timedelta(days=n)
+            rows.append({
+                "provider": self.source,
+                "issued_at": issued_at.isoformat(),
+                "valid_at": valid.isoformat(),
+                "station_id": station.station_id,
+                "variables": variables,
+                "raw_ref": f"kma:mid:{station.station_id}:{self.tm_fc}",
+            })
+        return rows
+
+    def fetch(self) -> list[dict]:
+        if not self.api_key:
+            return []
+        out = []
+        for st in WeatherStation.objects.filter(is_active=True):
+            out.extend(self._fetch_station(st))
+        return out
+
+
 def get_forecast_client() -> BaseForecastClient:
     """키가 있으면 실 단기예보 API, 없으면 fixture."""
     if getattr(settings, "DATA_GO_KR_API_KEY", ""):
         return RealForecastClient()
     return FixtureForecastClient()
+
+
+def get_mid_forecast_client() -> Optional[BaseForecastClient]:
+    """중기기온예보 클라이언트(키 있을 때만)."""
+    if getattr(settings, "DATA_GO_KR_API_KEY", ""):
+        return RealMidForecastClient()
+    return None
 
 
 @transaction.atomic
