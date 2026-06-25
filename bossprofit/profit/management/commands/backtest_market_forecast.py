@@ -1,4 +1,3 @@
-import math
 import random
 from datetime import timedelta
 from decimal import Decimal
@@ -7,6 +6,11 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from profit.forecasting.engine import BasePriceModel, money
+from profit.forecasting.evaluation import (
+    conformal_error_quantile,
+    metric_bundle,
+    seasonal_naive,
+)
 from profit.models import (
     ForecastCalibration,
     ForecastModelComparison,
@@ -21,18 +25,12 @@ LAST_VALUE_VERSION = "baseline-last-value-v1"
 SEASONAL_NAIVE_VERSION = "baseline-seasonal-naive-v1"
 
 
-def quantile(values, probability):
-    if not values:
-        return Decimal("0")
-    ordered = sorted(values)
-    index = int(round((len(ordered) - 1) * probability))
-    return ordered[index]
-
-
-def seasonal_naive_prediction(eligible):
-    cutoff = eligible[-1].observed_date - timedelta(days=7)
-    candidates = [row for row in eligible if row.observed_date <= cutoff]
-    return candidates[-1].price if candidates else eligible[-1].price
+def seasonal_naive_prediction(eligible, horizon):
+    return seasonal_naive(
+        [row.price for row in eligible],
+        horizon=horizon,
+        season_length=7,
+    )
 
 
 def paired_bootstrap_ci(candidate_errors, baseline_errors, seed=42, samples=500):
@@ -54,30 +52,20 @@ def paired_bootstrap_ci(candidate_errors, baseline_errors, seed=42, samples=500)
 
 
 def metric_values(samples, prediction_key, scale, interval_width=None):
-    errors = [abs(row["actual"] - row[prediction_key]) for row in samples]
-    signed_errors = [row[prediction_key] - row["actual"] for row in samples]
-    actual_sum = sum((row["actual"] for row in samples), Decimal("0"))
-    mae = sum(errors, Decimal("0")) / Decimal(len(errors))
-    rmse = Decimal(
-        str(
-            math.sqrt(
-                sum(float(error) ** 2 for error in errors) / len(errors)
-            )
-        )
-    )
+    actual = [row["actual"] for row in samples]
+    predicted = [row[prediction_key] for row in samples]
+    metrics = metric_bundle(actual, predicted, scale=scale)
+    errors = [
+        abs(row["actual"] - row[prediction_key])
+        for row in samples
+    ]
     return {
-        "wape": (
-            sum(errors, Decimal("0")) / actual_sum
-            if actual_sum
-            else None
-        ),
-        "mase": mae / scale if scale else None,
-        "mae": money(mae),
-        "rmse": money(rmse),
-        "bias": money(
-            sum(signed_errors, Decimal("0")) / Decimal(len(signed_errors))
-        ),
-        "pinball_loss": money(mae * Decimal("0.5")),
+        "wape": metrics["wape"],
+        "mase": metrics["mase"],
+        "mae": money(metrics["mae"]),
+        "rmse": money(metrics["rmse"]),
+        "bias": money(metrics["bias"]),
+        "pinball_loss": money(metrics["pinball_loss"]),
         "interval_width": interval_width,
         "errors": errors,
     }
@@ -206,7 +194,10 @@ class Command(BaseCommand):
                             "actual": actual,
                             "candidate": prediction,
                             "last_value": eligible[-1].price,
-                            "seasonal_naive": seasonal_naive_prediction(eligible),
+                            "seasonal_naive": seasonal_naive_prediction(
+                                eligible,
+                                horizon,
+                            ),
                             "previous": eligible[-1].price,
                         }
                     )
@@ -237,7 +228,10 @@ class Command(BaseCommand):
                     abs(row["actual"] - row["candidate"])
                     for row in calibration_samples
                 ]
-                interval_half_width = quantile(calibration_errors, 0.8)
+                interval_half_width = conformal_error_quantile(
+                    calibration_errors,
+                    Decimal("0.8"),
+                )
                 covered = sum(
                     abs(row["actual"] - row["candidate"]) <= interval_half_width
                     for row in evaluation_samples

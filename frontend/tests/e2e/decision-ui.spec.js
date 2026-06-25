@@ -1,17 +1,33 @@
 import { expect, test } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const artifactDir = path.resolve('../artifacts/ui')
 fs.mkdirSync(artifactDir, { recursive: true })
 
-async function authenticate(page) {
-  const response = await page.request.post(
-    'http://127.0.0.1:8000/api/v1/accounts/login/',
-    { data: { username: 'ksm960mm', password: 'ssafy486' } },
+function issueLocalTestTokens() {
+  const backendDir = path.resolve('../bossprofit')
+  const python = path.resolve('../.venv/Scripts/python.exe')
+  const username = process.env.BOSSPROFIT_E2E_USERNAME || 'ksm960mm'
+  const script = [
+    'import json',
+    'from django.contrib.auth import get_user_model',
+    'from rest_framework_simplejwt.tokens import RefreshToken',
+    `user=get_user_model().objects.get(username=${JSON.stringify(username)})`,
+    'refresh=RefreshToken.for_user(user)',
+    'print(json.dumps({"access": str(refresh.access_token), "refresh": str(refresh)}))',
+  ].join(';')
+  const output = execFileSync(
+    python,
+    ['manage.py', 'shell', '-c', script],
+    { cwd: backendDir, encoding: 'utf8' },
   )
-  expect(response.ok()).toBeTruthy()
-  const tokens = await response.json()
+  return JSON.parse(output.trim().split(/\r?\n/).at(-1))
+}
+
+async function authenticate(page) {
+  const tokens = issueLocalTestTokens()
   await page.addInitScript(({ access, refresh }) => {
     localStorage.setItem('access_token', access)
     localStorage.setItem('refresh_token', refresh)

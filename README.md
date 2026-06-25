@@ -1,308 +1,117 @@
-﻿# BOSSPROFIT
+# BOSSPROFIT
 
-소규모 외식 자영업자를 위한 메뉴 단위 원가 및 수익성 분석 프로젝트입니다.
+식재료 시장가격을 예측하고, 가격 변화가 내 매장의 어떤 메뉴에 영향을 주는지
+확인한 뒤 대응 행동까지 정리하는 외식 자영업자용 의사결정 서비스입니다.
 
-식당 운영 과정에서 메뉴별 재료 원가, 판매가, 배달 수수료, 포장비, 마진을 수기로 계산하기 어렵다는 문제에서 출발했습니다. 초기에는 Django 기반 MVP로 대시보드와 메뉴 상세 화면을 구현했고, 이후 같은 도메인을 TypeScript 기반 REST API로 재구현했습니다.
+> 어떤 재료의 가격이 오르고, 내 매장의 어떤 메뉴를 먼저 확인해야 하는지 알려주는 서비스
 
-현재 메인 애플리케이션은 Vue 프런트엔드와 Django REST API 조합입니다.
-TypeScript API는 같은 도메인을 별도로 구현한 실험 프로젝트로 보존합니다.
+현재 구현은 Vue 3 프런트엔드와 Django REST API를 사용합니다. 매장 판매 데이터,
+KAMIS 가격, 도매시장 거래, 주산지 기상 데이터를 한 파이프라인에서 다루며,
+데이터가 부족한 경우 수익성이나 운영 성과를 임의로 단정하지 않습니다.
 
-```text
-BossProfit/
-├── frontend/                Vue 3 사용자 화면
-├── bossprofit/              Django REST API 및 레거시 템플릿
-├── boss-profit-api-ts/      TypeScript 기반 메뉴 원가 관리 API
-├── bossprofit_dashboard.png
-├── bossprofit_menu_detail.png
-└── README.md
-```
+## 핵심 흐름
 
-## 프로젝트 구성
+1. 시장가격 예측
+2. 내 메뉴 영향 계산
+3. 근거 기반 행동 전략 제안
 
-### 1. Vue + Django 애플리케이션
+로그인 후 대시보드에서는 가장 위험한 재료와 예측구간을 먼저 보여줍니다.
+메뉴 화면은 실제 POS 판매량과 매출을 표시하되, 레시피와 원가가 연결되지 않은
+메뉴는 `분석 대기`로 분리합니다.
 
-`frontend/`와 `bossprofit/`을 함께 실행하는 현재 메인 애플리케이션입니다.
-
-엑셀 계산기로 검증한 메뉴 원가 계산 로직을 Django로 옮기고, 대시보드와 메뉴 상세 화면에서 결과를 확인할 수 있도록 구현했습니다.
-
-주요 기능:
-
-- 21개 메뉴, 35개 재료, 118개 레시피 항목 샘플 데이터
-- 메뉴별 재료 원가 계산
-- 홀, 포장, 배달 마진 계산
-- 메뉴별 월 예상 이익 계산
-- 신호등 분류
-- Django admin을 통한 데이터 수정
-- 대시보드 및 메뉴 상세 화면 제공
-- JWT 회원가입 및 로그인
-- 메뉴·재료 CRUD
-- 사용자별 손익 가정과 계산 스냅샷
-- 수익성 추이 차트
-
-주요 파일:
+## 기술 구성
 
 ```text
-bossprofit/
-├── manage.py
-├── db.sqlite3
-├── seed_data.json
-├── bossprofit_project/
-│   ├── settings.py
-│   └── urls.py
-└── profit/
-    ├── models.py
-    ├── calculator.py
-    ├── views.py
-    ├── urls.py
-    ├── admin.py
-    ├── templates/
-    └── static/
-
-frontend/
-├── src/
-│   ├── api/
-│   ├── stores/
-│   ├── views/
-│   └── router/
-└── vite.config.js
+frontend/                  Vue 3 + Vite + Pinia
+bossprofit/                Django + Django REST Framework + SQLite
+  accounts/                인증과 매장 멤버십
+  profit/                  판매·메뉴·시장·기상·예측·분석
+  profit/forecasting/      단계형 예측 엔진과 평가 도구
 ```
 
-### 2. TypeScript API
-
-`boss-profit-api-ts/` 폴더에 있는 서버 API 프로젝트입니다.
-
-기존 Django MVP에서 확인한 메뉴 원가 계산 구조를 바탕으로, TypeScript, Express, Prisma, SQLite를 사용해 관계형 DB 기반 REST API로 재구현했습니다.
-
-주요 기능:
-
-- 메뉴 목록 조회
-- 메뉴 상세 조회
-- 재료 목록 조회
-- 레시피 항목 조회 및 등록
-- 메뉴별 원가, 마진, 마진율 계산
-- HTML 화면에서 API 결과 확인
-- DB 구조 시각화 화면 제공
-
-주요 API:
-
-| Method | URL | 설명 |
-|---|---|---|
-| GET | `/api/menus` | 메뉴 목록 조회 |
-| GET | `/api/menus/:id` | 메뉴 상세 조회 |
-| GET | `/api/menus/:id/cost` | 메뉴별 원가 계산 |
-| GET | `/api/ingredients` | 재료 목록 조회 |
-| GET | `/api/recipe-items` | 레시피 항목 조회 |
-| POST | `/api/recipe-items` | 레시피 항목 등록 |
-
-브라우저 화면:
+예측값은 다음 구성요소를 분리해 저장합니다.
 
 ```text
-http://localhost:3000
+final_prediction
+= base_prediction
++ weather_adjustment
++ residual_adjustment
 ```
 
-DB 구조 화면:
+- `BasePriceModel`: 가격 이력과 계절·추세
+- `WeatherSupplyImpactModel`: 주산지 기상·수급 노출
+- `ResidualCorrectionModel`: rolling-origin OOF 잔차
+- `IntervalCalibration`: 품목·예측기간별 구간 보정
 
-```text
-http://localhost:3000/schema.html
-```
+평가는 마지막 값 및 계절 나이브 baseline과 비교하며 WAPE, MASE, MAE, RMSE,
+bias, pinball loss, interval coverage를 기록합니다. 검증되지 않은 정확도나
+매출 개선 수치는 제품 화면에 노출하지 않습니다.
 
-API 안내:
+## 로컬 실행
 
-```text
-http://localhost:3000/api
-```
-
-## 왜 두 폴더로 나누었는가
-
-이 프로젝트는 먼저 Django로 식당 메뉴 원가 분석 MVP를 만들면서 문제 정의, 샘플 데이터 구성, 계산 로직 검증, 대시보드 화면 구현에 집중했습니다.
-
-이후 같은 도메인의 핵심 구조인 `메뉴`, `재료`, `레시피 항목`, `원가 계산`을 TypeScript 서버 API로 작게 재구현했습니다.
-
-두 폴더의 역할은 다음과 같습니다.
-
-| 폴더 | 역할 |
-|---|---|
-| `frontend/` + `bossprofit/` | 현재 메인 앱. Vue UI, JWT 인증, Django REST API |
-| `boss-profit-api-ts/` | TypeScript 기반 서버 API. RDBMS 설계와 REST API 중심 |
-
-## DB 설계 의도
-
-핵심 모델은 다음 세 가지입니다.
-
-```text
-Menu
-Ingredient
-RecipeItem
-```
-
-### Menu
-
-판매 메뉴를 저장합니다.
-
-- 메뉴명
-- 카테고리
-- 판매가
-
-### Ingredient
-
-재료 정보를 저장합니다.
-
-- 재료명
-- 단위
-- 단위당 가격
-
-### RecipeItem
-
-메뉴와 재료를 연결하는 중간 테이블입니다.
-
-- 메뉴 ID
-- 재료 ID
-- 해당 메뉴에 들어가는 재료 사용량
-
-`Menu`와 `Ingredient`는 다대다에 가까운 관계입니다. 하나의 메뉴에는 여러 재료가 들어가고, 하나의 재료는 여러 메뉴에 사용될 수 있습니다.
-
-하지만 단순한 다대다 관계만으로는 "왕돈까스에 돼지고기가 200g 들어간다"처럼 사용량을 저장하기 어렵습니다. 그래서 `RecipeItem`이라는 중간 테이블을 직접 설계해 `quantity`를 저장했습니다.
-
-```text
-Menu 1 --- N RecipeItem N --- 1 Ingredient
-```
-
-이 구조 덕분에 재료 단가가 바뀌면 해당 재료를 사용하는 메뉴들의 원가 계산 결과가 함께 바뀔 수 있습니다.
-
-## 원가 계산 로직
-
-메뉴 원가는 레시피 항목을 기준으로 계산합니다.
-
-```text
-재료별 원가 = 재료 사용량 * 재료 단위당 가격
-메뉴 총 원가 = 재료별 원가 합계
-마진 = 판매가 - 메뉴 총 원가
-마진율 = 마진 / 판매가 * 100
-```
-
-예시 응답:
-
-```json
-{
-  "menu": "왕돈까스",
-  "price": 13000,
-  "total_cost": 1860,
-  "margin": 11140,
-  "margin_rate": 85.69,
-  "items": [
-    {
-      "ingredient": "돼지고기",
-      "quantity": 200,
-      "unit": "g",
-      "unit_price": 7,
-      "cost": 1400
-    }
-  ]
-}
-```
-
-## 실행 방법
-
-### 메인 애플리케이션 실행
-
-백엔드:
+### 백엔드
 
 ```powershell
 cd bossprofit
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py seed_data
-python manage.py runserver
+..\.venv\Scripts\python.exe manage.py migrate
+..\.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000
 ```
 
-프런트엔드(새 터미널):
+### 프런트엔드
 
 ```powershell
 cd frontend
 npm install
-npm run dev
+npm run dev -- --host 127.0.0.1
 ```
 
-접속:
+- 프런트엔드: <http://127.0.0.1:5173/>
+- API: <http://127.0.0.1:8000/api/v1/>
 
-```text
-http://localhost:5173
-http://127.0.0.1:8000/admin/
+API 키는 커밋하지 않고 `bossprofit/.env`에만 저장합니다. 필요한 환경변수와
+실데이터 수집 명령은 [bossprofit/DATA_PIPELINE.md](bossprofit/DATA_PIPELINE.md)를
+참고하세요.
+
+## 매장 POS 데이터
+
+수원세류점 POS 엑셀은 상품군 병합 셀을 올바르게 이어받아 파싱합니다. 동일한
+상품·날짜가 여러 파일에 있으면 합산하며, 누락된 날짜를 판매량 0으로 만들지
+않습니다.
+
+```powershell
+cd bossprofit
+..\.venv\Scripts\python.exe manage.py import_pos_sales `
+  --username <사용자명> `
+  --store-name "<매장명>" `
+  --file "<엑셀1>" `
+  --file "<엑셀2>"
 ```
 
-### TypeScript API 실행
+## 주요 API
 
-```bash
-cd boss-profit-api-ts
-npm install
-copy .env.example .env
-npx prisma generate
-npx prisma migrate dev --name init
-npm run seed
-npm run dev
+- `GET /api/v1/public/product-preview/`
+- `GET /api/v1/dashboard/`
+- `GET /api/v1/analysis/store/`
+- `GET /api/v1/analysis/report/`
+- `POST /api/v1/analysis/follow-up/`
+- `POST /api/v1/action-plans/`
+- `GET /api/v1/market/rankings/`
+
+매장 소유 데이터는 인증된 사용자의 `store_id` 범위에서만 조회합니다.
+
+## 검증
+
+```powershell
+cd bossprofit
+..\.venv\Scripts\python.exe manage.py test
+..\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
+
+cd ..\frontend
+npm run build
+npx playwright test
 ```
 
-접속:
-
-```text
-http://localhost:3000
-http://localhost:3000/schema.html
-http://localhost:3000/api/menus
-http://localhost:3000/api/menus/1/cost
-```
-
-Windows 로컬 환경에서 Prisma 마이그레이션이 실패하면 아래 순서로 SQLite 테이블을 직접 생성할 수 있습니다.
-
-```bash
-npm run db:create
-npx prisma generate
-npm run seed
-npm run dev
-```
-
-## 현재 구현 수준
-
-완료한 부분:
-
-- 식당 메뉴 원가 관리 도메인 정의
-- Vue 기반 사용자 화면 및 Django REST API
-- 메뉴, 재료, 레시피 항목 모델 구성
-- 메뉴별 원가 및 마진 계산 로직 구현
-- JWT 회원가입 및 로그인
-- 메뉴·재료 CRUD와 손익 가정 수정
-- 사용자별 손익 가정 및 계산 스냅샷
-- 수익성 추이 차트
-- 핵심 API 테스트
-- TypeScript 기반 REST API 재구현
-- Prisma ORM과 SQLite 기반 관계형 DB 모델 작성
-- API 결과 확인용 HTML 화면 추가
-- DB 구조 시각화 화면 추가
-- 샘플 데이터 입력 및 API 응답 검증
-
-아직 부족한 부분:
-
-- 메뉴·재료 원본 데이터의 사용자·매장별 완전 분리
-- 재료 단가 변경 이력 관리
-- 외부 식재료 시세 API 연동
-- 배포
-- 테스트 코드
-
-## 구현 포인트
-
-- 메뉴와 재료를 별도 테이블로 분리했습니다.
-- 메뉴와 재료 사이에 `RecipeItem` 중간 테이블을 두어 재료 사용량을 저장했습니다.
-- DB에 저장된 관계 데이터를 기반으로 메뉴별 원가와 마진을 계산했습니다.
-- 계산 로직을 API로 제공해 브라우저나 다른 클라이언트에서 사용할 수 있도록 했습니다.
-- Django MVP와 TypeScript API를 분리해 화면 검증과 서버 API 구현을 각각 확인할 수 있도록 했습니다.
-
-## 스크린샷
-
-### Django 대시보드
-
-![BOSSPROFIT dashboard](./bossprofit_dashboard.png)
-
-### Django 메뉴 상세
-
-![BOSSPROFIT menu detail](./bossprofit_menu_detail.png)
+상세 제품·모델 요구사항은
+[BOSSPROFIT_DEVELOPMENT_PLAN.md](BOSSPROFIT_DEVELOPMENT_PLAN.md),
+전체 설계 맥락은 [BOSSPROFIT_MASTER_REPORT.md](BOSSPROFIT_MASTER_REPORT.md)를
+참고하세요.
