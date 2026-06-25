@@ -425,6 +425,88 @@ def api_store_analysis(request):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
+def api_sales_calendar(request):
+    """월별 일자별 실제 매출 (캘린더 장부)."""
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+
+    qs = DailyMenuSale.objects.filter(store=store)
+    month_dates = list(qs.dates("sale_date", "month"))
+    available = [f"{d.year:04d}-{d.month:02d}" for d in month_dates]
+
+    try:
+        year = int(request.query_params.get("year"))
+        month = int(request.query_params.get("month"))
+    except (TypeError, ValueError):
+        latest = month_dates[-1] if month_dates else timezone.localdate()
+        year, month = latest.year, latest.month
+
+    rows = (
+        qs.filter(sale_date__year=year, sale_date__month=month)
+        .values("sale_date")
+        .annotate(revenue=Sum("net_revenue"), quantity=Sum("quantity"))
+        .order_by("sale_date")
+    )
+    days = [
+        {
+            "date": r["sale_date"].isoformat(),
+            "day": r["sale_date"].day,
+            "weekday": r["sale_date"].weekday(),  # 0=월 ... 6=일
+            "revenue": int(r["revenue"] or 0),
+            "quantity": r["quantity"] or 0,
+        }
+        for r in rows
+    ]
+    total = sum(d["revenue"] for d in days)
+    return Response({
+        "year": year,
+        "month": month,
+        "total": total,
+        "record_days": len(days),
+        "days": days,
+        "available_months": available,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def api_sales_day_detail(request):
+    """특정 날짜의 메뉴별 실제 매출표."""
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+    try:
+        target = date.fromisoformat(request.query_params.get("date", ""))
+    except ValueError:
+        return Response({"detail": "날짜 형식이 올바르지 않습니다."}, status=400)
+
+    rows = (
+        DailyMenuSale.objects.filter(store=store, sale_date=target)
+        .values("menu__menu_id", "menu__name", "menu__category")
+        .annotate(quantity=Sum("quantity"), net_revenue=Sum("net_revenue"))
+        .order_by("-net_revenue")
+    )
+    items = [
+        {
+            "menu_id": r["menu__menu_id"],
+            "name": r["menu__name"],
+            "category": r["menu__category"],
+            "quantity": r["quantity"] or 0,
+            "net_revenue": int(r["net_revenue"] or 0),
+        }
+        for r in rows
+    ]
+    return Response({
+        "date": target.isoformat(),
+        "total": sum(i["net_revenue"] for i in items),
+        "total_quantity": sum(i["quantity"] for i in items),
+        "items": items,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def api_analysis_report(request):
     store = get_user_store(request.user)
     if store is None:

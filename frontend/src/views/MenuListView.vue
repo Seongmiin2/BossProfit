@@ -64,7 +64,6 @@ const applyCustom = () => {
   load()
 }
 const maxQuantity = computed(() => Math.max(...(analysis.value?.top_menus?.map(item => item.quantity) || [1])))
-const maxRevenue = computed(() => Math.max(...(analysis.value?.menus?.map(item => item.net_revenue) || [1])))
 const filtered = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   const stateBySegment = {
@@ -167,27 +166,6 @@ const selectMenu = async (menu) => {
             <div><span>분석 대기</span><b>부족한 데이터 표시</b></div>
           </div>
         </article>
-      </section>
-
-      <section class="bp-analysis-panel">
-        <header><div><span>메뉴 포트폴리오</span><h2>판매량과 실매출 비교</h2></div><small>원 크기: 최근 30일 판매량</small></header>
-        <div class="bp-scatter">
-          <span class="axis-y">실매출 ↑</span>
-          <button
-            v-for="menu in analysis.menus.slice(0, 20)"
-            :key="menu.menu_id"
-            :title="`${menu.name}: ${menu.quantity}개 / ${formatKRW(menu.net_revenue)}원`"
-            :style="{
-              left: `${Math.max(4, Math.min(94, (menu.quantity / maxQuantity) * 92))}%`,
-              bottom: `${Math.max(5, Math.min(90, (menu.net_revenue / maxRevenue) * 88))}%`,
-              width: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
-              height: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
-            }"
-            :class="menu.state.toLowerCase()"
-            @click="selectMenu(menu)"
-          >{{ menu.rank <= 5 ? menu.rank : '' }}</button>
-          <span class="axis-x">판매량 →</span>
-        </div>
       </section>
 
       <section class="bp-menu-browser">
