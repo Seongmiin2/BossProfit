@@ -3,14 +3,14 @@ BOSSPROFIT REST API Views
 """
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db.models.deletion import ProtectedError
 from django.db import transaction
 from django.db.models import Sum, Avg
 from django.db.models.functions import TruncDate
 from django.utils import timezone
-from datetime import timedelta
+from datetime import date, timedelta
 
 from accounts.services import get_user_store
 from accounts.onboarding import refresh_onboarding_progress
@@ -20,6 +20,15 @@ from .models import (
     DailyMenuSale,
     ProfitAssumption,
     MenuProfitSnapshot,
+    MarketModelMetric,
+    MarketRankingSnapshot,
+    MarketRecommendation,
+    ActionPlan,
+)
+from .analysis_service import (
+    build_analysis_report,
+    build_market_risk,
+    build_store_analysis,
 )
 from .calculator import (
     calculate_menu,
@@ -379,6 +388,117 @@ def api_daily_sales_upsert(request):
     })
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_public_product_preview(request):
+    return Response({
+        "product_statement": (
+            "어떤 재료의 가격이 오르고, 내 매장의 어떤 메뉴를 먼저 "
+            "확인해야 하는지 알려주는 서비스"
+        ),
+        "market_risk": build_market_risk(),
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def api_store_analysis(request):
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+    return Response({
+        "analysis": build_store_analysis(store),
+        "market_risk": build_market_risk(),
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def api_analysis_report(request):
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+    return Response(build_analysis_report(store))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def api_action_plan_create(request):
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+    required = ("title", "period", "reason")
+    missing = [key for key in required if not request.data.get(key)]
+    if missing:
+        return Response(
+            {"detail": f"필수 항목이 없습니다: {', '.join(missing)}"},
+            status=400,
+        )
+    review_date = request.data.get("review_date")
+    try:
+        parsed_review_date = date.fromisoformat(review_date) if review_date else None
+    except ValueError:
+        return Response({"detail": "점검일 형식은 YYYY-MM-DD입니다."}, status=400)
+    plan = ActionPlan.objects.create(
+        store=store,
+        created_by=request.user,
+        title=request.data["title"],
+        period_label=request.data["period"],
+        reason=request.data["reason"],
+        data_used=request.data.get("data_used", []),
+        source_documents=request.data.get("source_documents", []),
+        expected_effect=request.data.get("expected_effect", ""),
+        success_criteria=request.data.get("success_criteria", ""),
+        stop_criteria=request.data.get("stop_criteria", ""),
+        review_date=parsed_review_date,
+    )
+    return Response({"id": plan.id, "status": plan.status}, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def api_analysis_follow_up(request):
+    store = get_user_store(request.user)
+    if store is None:
+        return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+    question = str(request.data.get("question") or "").strip()
+    if not question:
+        return Response({"detail": "질문을 입력해주세요."}, status=400)
+    report = build_analysis_report(store)
+    top = report["sales_analysis"]["summary"]["top_food_menu"]
+    if "가장" in question or "먼저" in question:
+        answer = (
+            f"현재 먼저 확인할 메뉴는 {top['name']}입니다. 최근 분석기간 "
+            f"판매량 {top['quantity']:,}개로 음식 메뉴 1위입니다. "
+            "다만 레시피 연결 전에는 원가 위험이나 수익성을 판단할 수 없습니다."
+            if top
+            else "판매 데이터가 없어 우선 메뉴 판매자료를 연결해야 합니다."
+        )
+    elif "양파" in question:
+        risk = report["market_risks"][0] if report["market_risks"] else None
+        answer = (
+            risk.get("impact_message")
+            if risk and risk.get("impact_state") == "INSUFFICIENT"
+            else "양파와 연결된 메뉴 영향 데이터를 확인했습니다."
+        )
+    else:
+        answer = (
+            "현재 답변은 저장된 판매 통계와 시장가격 예측만 사용합니다. "
+            "문서 RAG와 외부 LLM은 아직 연결되지 않아 근거 문서를 생성하지 않습니다."
+        )
+    return Response({
+        "answer": answer,
+        "engine": "STRUCTURED_ANALYSIS",
+        "used_tools": [
+            "get_store_sales_summary",
+            "get_menu_sales_ranking",
+            "get_market_forecast",
+        ],
+        "sources": [],
+        "limitations": report["limitations"],
+    })
+
+
 # ===== History =====
 
 @api_view(['GET'])
@@ -439,3 +559,204 @@ def api_history(request):
         result['cost_rate'].append(float(item['avg_food_cost_rate'] or 0) * 100)
 
     return Response(result)
+
+
+MARKET_RANKING_TYPES = {
+    "volume": "VOLUME",
+    "today": "TODAY",
+    "tomorrow": "TOMORROW",
+}
+
+
+def _market_item_payload(snapshot):
+    item = snapshot.item
+    recommendation = item.recommendations.filter(
+        as_of_date__lte=snapshot.as_of_date
+    ).first()
+    forecasts = {}
+    for forecast in item.forecasts.filter(
+        as_of_date__lte=snapshot.as_of_date,
+        horizon_days__in=[1, 7, 30],
+    ).order_by("horizon_days", "-as_of_date", "-created_at"):
+        forecasts.setdefault(forecast.horizon_days, forecast)
+    observation_query = item.observations.filter(
+        observed_date__lte=snapshot.as_of_date
+    )
+    if observation_query.filter(
+        source="KAMIS_PERIOD",
+        region_code="AVERAGE",
+    ).exists():
+        observation_query = observation_query.filter(
+            source="KAMIS_PERIOD",
+            region_code="AVERAGE",
+        )
+    observations = list(observation_query[:14])
+    latest = observations[0] if observations else None
+    decision = recommendation.decision if recommendation else "WATCH"
+    decision_labels = dict(MarketRecommendation.DECISION_CHOICES)
+    tones = {"BUY": "buy", "WATCH": "watch", "AVOID": "avoid"}
+
+    return {
+        "code": item.code,
+        "name": item.name,
+        "category": item.category,
+        "region": item.region,
+        "unit": item.unit,
+        "image_key": item.image_key,
+        "rank": snapshot.rank,
+        "previous_rank": snapshot.previous_rank,
+        "rank_delta": (
+            snapshot.previous_rank - snapshot.rank
+            if snapshot.previous_rank is not None
+            else None
+        ),
+        "score": float(snapshot.score),
+        "change_rate": float(snapshot.display_change_rate),
+        "current_price": float(latest.price) if latest else None,
+        "decision": decision_labels.get(decision, "관망"),
+        "decision_code": decision,
+        "decision_tone": tones.get(decision, "watch"),
+        "summary": recommendation.summary if recommendation else "분석 준비 중입니다.",
+        "action": recommendation.action if recommendation else "데이터를 더 확인해주세요.",
+        "evidence": recommendation.evidence if recommendation else [],
+        "outlooks": [
+            {
+                "horizon_days": horizon,
+                "change_rate": float(forecasts[horizon].expected_change_rate),
+                "predicted_price": float(forecasts[horizon].predicted_price),
+                "lower_price": float(forecasts[horizon].lower_price),
+                "upper_price": float(forecasts[horizon].upper_price),
+                "confidence_grade": forecasts[horizon].confidence_grade,
+                "model_version": forecasts[horizon].model_version,
+            }
+            for horizon in [1, 7, 30]
+            if horizon in forecasts
+        ],
+        "history": [
+            {
+                "date": observation.observed_date.isoformat(),
+                "price": float(observation.price),
+                "volume": (
+                    float(observation.volume)
+                    if observation.volume is not None
+                    else None
+                ),
+            }
+            for observation in reversed(observations)
+        ],
+        "source": latest.source if latest else None,
+        "is_demo": snapshot.is_demo,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def api_market_ranking(request, ranking_type):
+    normalized_type = MARKET_RANKING_TYPES.get(ranking_type)
+    if normalized_type is None:
+        return Response({"detail": "지원하지 않는 랭킹 유형입니다."}, status=404)
+
+    try:
+        limit = min(max(int(request.query_params.get("limit", 5)), 1), 20)
+    except ValueError:
+        limit = 5
+    query = request.query_params.get("q", "").strip()
+
+    latest_date = (
+        MarketRankingSnapshot.objects.filter(ranking_type=normalized_type)
+        .order_by("-as_of_date")
+        .values_list("as_of_date", flat=True)
+        .first()
+    )
+    if latest_date is None:
+        return Response({
+            "ranking_type": ranking_type,
+            "as_of_date": None,
+            "generated_at": None,
+            "items": [],
+            "metrics": {"is_verified": False},
+            "is_demo": False,
+        })
+
+    snapshots = MarketRankingSnapshot.objects.filter(
+        ranking_type=normalized_type,
+        as_of_date=latest_date,
+    ).select_related("item")
+    if query:
+        snapshots = snapshots.filter(item__name__icontains=query)
+    snapshots = list(snapshots.order_by("rank")[:limit])
+
+    metric = MarketModelMetric.objects.filter(
+        is_verified=True,
+        item__isnull=True,
+        horizon_days=1,
+    ).order_by("-evaluation_end").first()
+    item_metrics = list(
+        MarketModelMetric.objects.filter(
+            is_verified=True,
+            item_id__in=[snapshot.item_id for snapshot in snapshots],
+            horizon_days=1,
+        ).order_by("-evaluation_end")
+    )
+    if metric is None and item_metrics:
+        metric_payload = {
+            "is_verified": True,
+            "direction_accuracy": sum(
+                float(value.direction_accuracy)
+                for value in item_metrics
+                if value.direction_accuracy is not None
+            ) / len(item_metrics),
+            "wape": sum(
+                float(value.wape)
+                for value in item_metrics
+                if value.wape is not None
+            ) / len(item_metrics),
+            "interval_coverage": sum(
+                float(value.interval_coverage)
+                for value in item_metrics
+                if value.interval_coverage is not None
+            ) / len(item_metrics),
+            "model_version": item_metrics[0].model_version,
+            "evaluation_start": min(
+                value.evaluation_start for value in item_metrics
+            ).isoformat(),
+            "evaluation_end": max(
+                value.evaluation_end for value in item_metrics
+            ).isoformat(),
+        }
+    else:
+        metric_payload = {
+            "is_verified": bool(metric),
+            "direction_accuracy": (
+                float(metric.direction_accuracy)
+                if metric and metric.direction_accuracy is not None
+                else None
+            ),
+            "wape": float(metric.wape) if metric and metric.wape is not None else None,
+            "interval_coverage": (
+                float(metric.interval_coverage)
+                if metric and metric.interval_coverage is not None
+                else None
+            ),
+            "model_version": metric.model_version if metric else None,
+            "evaluation_start": (
+                metric.evaluation_start.isoformat()
+                if metric and metric.evaluation_start
+                else None
+            ),
+            "evaluation_end": (
+                metric.evaluation_end.isoformat()
+                if metric and metric.evaluation_end
+                else None
+            ),
+        }
+    generated_at = snapshots[0].generated_at if snapshots else None
+
+    return Response({
+        "ranking_type": ranking_type,
+        "as_of_date": latest_date.isoformat(),
+        "generated_at": generated_at.isoformat() if generated_at else None,
+        "items": [_market_item_payload(snapshot) for snapshot in snapshots],
+        "metrics": metric_payload,
+        "is_demo": any(snapshot.is_demo for snapshot in snapshots),
+    })

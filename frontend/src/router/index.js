@@ -52,6 +52,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/market/rankings/:type',
+    name: 'MarketRanking',
+    component: () => import('@/views/MarketRankingView.vue'),
+  },
+  {
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue'),

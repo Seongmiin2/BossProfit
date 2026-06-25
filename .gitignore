@@ -15,3 +15,9 @@ db.sqlite3
 *.db
 
 generated/
+
+# Real store exports contain private operational data.
+/수원세류점*.xlsx
+/artifacts/
+/frontend/test-results/
+/frontend/playwright-report/

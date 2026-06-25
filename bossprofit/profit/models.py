@@ -154,6 +154,93 @@ class RecipeItem(models.Model):
         return f"{self.menu.name} ← {self.ingredient.name} {self.quantity}{self.ingredient.unit}"
 
 
+class IngredientMarketMapping(models.Model):
+    STATUS_CHOICES = [
+        ("PENDING", "검토 필요"),
+        ("CONFIRMED", "확정"),
+        ("REJECTED", "제외"),
+    ]
+
+    ingredient = models.ForeignKey(
+        Ingredient,
+        on_delete=models.CASCADE,
+        related_name="market_mappings",
+    )
+    market_item = models.ForeignKey(
+        "MarketItem",
+        on_delete=models.CASCADE,
+        related_name="ingredient_mappings",
+    )
+    confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ingredient", "market_item"],
+                name="unique_ingredient_market_mapping",
+            )
+        ]
+
+
+class PurchasePriceObservation(models.Model):
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        related_name="purchase_prices",
+    )
+    ingredient = models.ForeignKey(
+        Ingredient,
+        on_delete=models.CASCADE,
+        related_name="purchase_prices",
+    )
+    purchased_at = models.DateTimeField()
+    quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    unit = models.CharField(max_length=20)
+    total_price = models.DecimalField(max_digits=14, decimal_places=2)
+    supplier = models.CharField(max_length=100, blank=True)
+    memo = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-purchased_at"]
+
+
+class StoreSalesImport(models.Model):
+    """A traceable import of store-owned POS sales data."""
+
+    STATUS_CHOICES = [
+        ("STARTED", "진행 중"),
+        ("SUCCEEDED", "성공"),
+        ("FAILED", "실패"),
+    ]
+
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        related_name="sales_imports",
+    )
+    source_name = models.CharField(max_length=255)
+    source_sha256 = models.CharField(max_length=64)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="STARTED")
+    row_count = models.PositiveIntegerField(default=0)
+    imported_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["store", "source_sha256"],
+                name="unique_store_sales_import_file",
+            )
+        ]
+
+
 class DailyMenuSale(models.Model):
     """매장별 일일 메뉴 판매량."""
 
@@ -184,6 +271,16 @@ class DailyMenuSale(models.Model):
         verbose_name="판매 채널",
     )
     quantity = models.PositiveIntegerField(verbose_name="판매량")
+    gross_revenue = models.PositiveBigIntegerField(default=0)
+    discount_amount = models.PositiveBigIntegerField(default=0)
+    net_revenue = models.PositiveBigIntegerField(default=0)
+    source_import = models.ForeignKey(
+        StoreSalesImport,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sales",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -357,3 +454,728 @@ class MenuProfitSnapshot(models.Model):
         if "🟡" in self.signal:
             return "yellow"
         return "red"
+
+
+class MarketItem(models.Model):
+    """시장 가격·거래량·예측의 기준 품목."""
+
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=100)
+    category = models.CharField(max_length=50)
+    variety = models.CharField(max_length=100, blank=True)
+    grade = models.CharField(max_length=50, blank=True)
+    region = models.CharField(max_length=100, default="전국")
+    unit = models.CharField(max_length=30)
+    standard_unit = models.CharField(max_length=30, default="kg")
+    image_key = models.CharField(max_length=100, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class MarketPriceObservation(models.Model):
+    """수집 시점과 출처를 보존하는 시장 관측값."""
+
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="observations",
+    )
+    observed_date = models.DateField()
+    region_code = models.CharField(max_length=30, blank=True)
+    region_name = models.CharField(max_length=100, blank=True)
+    market_type = models.CharField(max_length=30, default="RETAIL")
+    unit = models.CharField(max_length=50, blank=True)
+    price = models.DecimalField(max_digits=14, decimal_places=2)
+    volume = models.DecimalField(max_digits=16, decimal_places=2, null=True, blank=True)
+    source = models.CharField(max_length=100)
+    source_item_code = models.CharField(max_length=100, blank=True)
+    source_unique_key = models.CharField(max_length=255, blank=True)
+    raw_payload = models.ForeignKey(
+        "RawSourcePayload",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="market_prices",
+    )
+    collected_at = models.DateTimeField()
+    is_demo = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-observed_date", "-collected_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "item",
+                    "observed_date",
+                    "source",
+                    "region_code",
+                    "market_type",
+                    "unit",
+                ],
+                name="unique_market_observation",
+            )
+        ]
+
+
+class IngestionRun(models.Model):
+    """One observable, reproducible execution of an external data collector."""
+
+    STATUS_CHOICES = [
+        ("RUNNING", "진행 중"),
+        ("SUCCEEDED", "성공"),
+        ("PARTIAL", "일부 성공"),
+        ("FAILED", "실패"),
+    ]
+
+    source = models.CharField(max_length=100)
+    dataset = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="RUNNING")
+    observation_cutoff = models.DateTimeField(null=True, blank=True)
+    requested_params = models.JSONField(default=dict)
+    source_version = models.CharField(max_length=100, blank=True)
+    code_revision = models.CharField(max_length=64, blank=True)
+    fetched_count = models.PositiveIntegerField(default=0)
+    created_count = models.PositiveIntegerField(default=0)
+    updated_count = models.PositiveIntegerField(default=0)
+    rejected_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+
+
+class RawSourcePayload(models.Model):
+    """Immutable raw API response with lineage back to its ingestion run."""
+
+    ingestion_run = models.ForeignKey(
+        IngestionRun,
+        on_delete=models.CASCADE,
+        related_name="raw_payloads",
+    )
+    source_url = models.URLField(max_length=1000)
+    request_params = models.JSONField(default=dict)
+    payload = models.JSONField()
+    payload_sha256 = models.CharField(max_length=64)
+    collected_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-collected_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ingestion_run", "payload_sha256"],
+                name="unique_raw_payload_per_run",
+            )
+        ]
+
+
+class CropProductionRegion(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="production_regions",
+    )
+    region_code = models.CharField(max_length=30)
+    region_name = models.CharField(max_length=100)
+    weight = models.DecimalField(max_digits=7, decimal_places=6)
+    mapping_confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    review_status = models.CharField(max_length=20, default="PENDING")
+    valid_from = models.DateField()
+    valid_to = models.DateField(null=True, blank=True)
+    source = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "region_code", "valid_from"],
+                name="unique_item_production_region_version",
+            )
+        ]
+
+
+class WeatherStationMapping(models.Model):
+    production_region = models.ForeignKey(
+        CropProductionRegion,
+        on_delete=models.CASCADE,
+        related_name="station_mappings",
+    )
+    provider = models.CharField(max_length=50)
+    station_id = models.CharField(max_length=50)
+    station_name = models.CharField(max_length=100, blank=True)
+    grid_x = models.IntegerField(null=True, blank=True)
+    grid_y = models.IntegerField(null=True, blank=True)
+    distance_km = models.DecimalField(max_digits=8, decimal_places=3, null=True, blank=True)
+    weight = models.DecimalField(max_digits=7, decimal_places=6, default=1)
+    mapping_confidence = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    review_status = models.CharField(max_length=20, default="PENDING")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["production_region", "provider", "station_id"],
+                name="unique_region_weather_station",
+            )
+        ]
+
+
+class WeatherObservation(models.Model):
+    provider = models.CharField(max_length=50)
+    station_id = models.CharField(max_length=50)
+    observed_at = models.DateTimeField()
+    variables = models.JSONField(default=dict)
+    quality = models.JSONField(default=dict)
+    collected_at = models.DateTimeField()
+    raw_payload = models.ForeignKey(
+        RawSourcePayload,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weather_observations",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "station_id", "observed_at"],
+                name="unique_weather_observation",
+            )
+        ]
+
+
+class WeatherForecastSnapshot(models.Model):
+    provider = models.CharField(max_length=50)
+    forecast_type = models.CharField(max_length=30)
+    location_key = models.CharField(max_length=100)
+    issued_at = models.DateTimeField()
+    valid_at = models.DateTimeField()
+    variables = models.JSONField(default=dict)
+    collected_at = models.DateTimeField()
+    raw_payload = models.ForeignKey(
+        RawSourcePayload,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weather_forecasts",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "provider",
+                    "forecast_type",
+                    "location_key",
+                    "issued_at",
+                    "valid_at",
+                ],
+                name="unique_weather_forecast_snapshot",
+            )
+        ]
+
+
+class WeatherExposureFeature(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="weather_exposures",
+    )
+    production_region = models.ForeignKey(
+        CropProductionRegion,
+        on_delete=models.CASCADE,
+        related_name="weather_exposures",
+    )
+    as_of_date = models.DateField()
+    windows = models.JSONField(default=dict)
+    anomalies = models.JSONField(default=dict)
+    feature_version = models.CharField(max_length=100)
+    observation_cutoff = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "item",
+                    "production_region",
+                    "as_of_date",
+                    "feature_version",
+                ],
+                name="unique_weather_exposure_feature",
+            )
+        ]
+
+
+class WholesaleAuctionObservation(models.Model):
+    source = models.CharField(max_length=100)
+    source_record_id = models.CharField(max_length=150, default="", blank=True)
+    auctioned_at = models.DateTimeField()
+    market_code = models.CharField(max_length=50)
+    market_name = models.CharField(max_length=100, blank=True)
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="auction_observations",
+    )
+    source_item_code = models.CharField(max_length=100)
+    source_item_name = models.CharField(max_length=100)
+    origin_name = models.CharField(max_length=100, blank=True)
+    grade = models.CharField(max_length=50, blank=True)
+    unit = models.CharField(max_length=50, blank=True)
+    volume = models.DecimalField(max_digits=16, decimal_places=3)
+    price = models.DecimalField(max_digits=14, decimal_places=2)
+    collected_at = models.DateTimeField()
+    raw_payload = models.ForeignKey(
+        RawSourcePayload,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="auction_observations",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "source_record_id"],
+                name="unique_wholesale_auction_observation",
+            )
+        ]
+
+
+class ProductionStatistic(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="production_statistics",
+    )
+    region_code = models.CharField(max_length=30)
+    region_name = models.CharField(max_length=100)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    acreage = models.DecimalField(max_digits=16, decimal_places=3, null=True, blank=True)
+    yield_amount = models.DecimalField(
+        max_digits=16,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    production_amount = models.DecimalField(
+        max_digits=16,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    unit = models.CharField(max_length=30)
+    source = models.CharField(max_length=100)
+    issued_at = models.DateTimeField(null=True, blank=True)
+    collected_at = models.DateTimeField()
+    raw_payload = models.ForeignKey(
+        RawSourcePayload,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="production_statistics",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "item",
+                    "region_code",
+                    "period_start",
+                    "period_end",
+                    "source",
+                ],
+                name="unique_production_statistic",
+            )
+        ]
+
+
+class ActionPlan(models.Model):
+    STATUS_CHOICES = [
+        ("SAVED", "저장"),
+        ("IN_PROGRESS", "진행 중"),
+        ("COMPLETED", "완료"),
+        ("CANCELLED", "중단"),
+    ]
+
+    store = models.ForeignKey(
+        "accounts.Store",
+        on_delete=models.CASCADE,
+        related_name="action_plans",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="bossprofit_action_plans",
+    )
+    title = models.CharField(max_length=200)
+    period_label = models.CharField(max_length=50)
+    reason = models.TextField()
+    data_used = models.JSONField(default=list)
+    source_documents = models.JSONField(default=list)
+    expected_effect = models.TextField(blank=True)
+    success_criteria = models.TextField(blank=True)
+    stop_criteria = models.TextField(blank=True)
+    review_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="SAVED")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+
+class ForecastRun(models.Model):
+    STATUS_CHOICES = [
+        ("RUNNING", "진행 중"),
+        ("SUCCEEDED", "성공"),
+        ("FAILED", "실패"),
+    ]
+
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="forecast_runs",
+    )
+    as_of_date = models.DateField()
+    model_version = models.CharField(max_length=100)
+    feature_version = models.CharField(max_length=100)
+    observation_cutoff = models.DateTimeField()
+    code_revision = models.CharField(max_length=64, blank=True)
+    random_seed = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="RUNNING")
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-as_of_date", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "as_of_date", "model_version"],
+                name="unique_forecast_run",
+            )
+        ]
+
+
+class ForecastPoint(models.Model):
+    run = models.ForeignKey(
+        ForecastRun,
+        on_delete=models.CASCADE,
+        related_name="points",
+    )
+    target_date = models.DateField()
+    horizon_days = models.PositiveSmallIntegerField()
+    median = models.DecimalField(max_digits=14, decimal_places=2)
+    lower = models.DecimalField(max_digits=14, decimal_places=2)
+    upper = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["run", "horizon_days"],
+                name="unique_forecast_point",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(lower__lte=models.F("median")),
+                name="forecast_lower_lte_median",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(median__lte=models.F("upper")),
+                name="forecast_median_lte_upper",
+            ),
+        ]
+
+
+class ForecastComponent(models.Model):
+    point = models.OneToOneField(
+        ForecastPoint,
+        on_delete=models.CASCADE,
+        related_name="components",
+    )
+    base_prediction = models.DecimalField(max_digits=14, decimal_places=2)
+    weather_adjustment = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    residual_adjustment = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    weather_forecast_issued_at = models.DateTimeField(null=True, blank=True)
+    details = models.JSONField(default=dict)
+
+
+class OutOfFoldForecast(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="oof_forecasts",
+    )
+    fold_id = models.CharField(max_length=100)
+    train_cutoff = models.DateField()
+    target_date = models.DateField()
+    horizon_days = models.PositiveSmallIntegerField()
+    prediction = models.DecimalField(max_digits=14, decimal_places=2)
+    actual = models.DecimalField(max_digits=14, decimal_places=2)
+    model_version = models.CharField(max_length=100)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "item",
+                    "fold_id",
+                    "target_date",
+                    "horizon_days",
+                    "model_version",
+                ],
+                name="unique_oof_forecast",
+            )
+        ]
+
+
+class ResidualObservation(models.Model):
+    oof_forecast = models.OneToOneField(
+        OutOfFoldForecast,
+        on_delete=models.CASCADE,
+        related_name="residual_observation",
+    )
+    residual = models.DecimalField(max_digits=14, decimal_places=2)
+    residual_type = models.CharField(max_length=30, default="ACTUAL_MINUS_PREDICTION")
+
+
+class ForecastCalibration(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="calibrations",
+        null=True,
+        blank=True,
+    )
+    model_version = models.CharField(max_length=100)
+    horizon_days = models.PositiveSmallIntegerField()
+    target_coverage = models.DecimalField(max_digits=5, decimal_places=4)
+    measured_coverage = models.DecimalField(
+        max_digits=5,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
+    absolute_error_quantile = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+    )
+    fitted_from = models.DateField()
+    fitted_to = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "model_version", "horizon_days"],
+                name="unique_forecast_calibration",
+            )
+        ]
+
+
+class MarketForecast(models.Model):
+    """품목·horizon별 가격 예측과 예측구간."""
+
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="forecasts",
+    )
+    run = models.ForeignKey(
+        ForecastRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="published_forecasts",
+    )
+    as_of_date = models.DateField()
+    target_date = models.DateField()
+    horizon_days = models.PositiveSmallIntegerField()
+    predicted_price = models.DecimalField(max_digits=14, decimal_places=2)
+    lower_price = models.DecimalField(max_digits=14, decimal_places=2)
+    upper_price = models.DecimalField(max_digits=14, decimal_places=2)
+    expected_change_rate = models.DecimalField(max_digits=8, decimal_places=4)
+    confidence_grade = models.CharField(max_length=20, default="검증 전")
+    model_version = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_demo = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["horizon_days", "-as_of_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "as_of_date", "horizon_days", "model_version"],
+                name="unique_market_forecast",
+            )
+        ]
+
+
+class MarketModelMetric(models.Model):
+    """검증이 완료된 모델 성능만 화면에 노출하기 위한 지표."""
+
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="model_metrics",
+        null=True,
+        blank=True,
+    )
+    model_version = models.CharField(max_length=100)
+    horizon_days = models.PositiveSmallIntegerField()
+    direction_accuracy = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    wape = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    mase = models.DecimalField(max_digits=8, decimal_places=4, null=True, blank=True)
+    mae = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    rmse = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    bias = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    pinball_loss = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    interval_coverage = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        null=True,
+        blank=True,
+    )
+    interval_width = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+    )
+    sample_count = models.PositiveIntegerField(default=0)
+    evaluation_method = models.CharField(
+        max_length=100,
+        default="ROLLING_ORIGIN_HOLDOUT",
+    )
+    evaluation_start = models.DateField(null=True, blank=True)
+    evaluation_end = models.DateField(null=True, blank=True)
+    is_verified = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "model_version", "horizon_days"],
+                name="unique_market_model_metric",
+            )
+        ]
+
+
+class ForecastModelComparison(models.Model):
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="model_comparisons",
+    )
+    horizon_days = models.PositiveSmallIntegerField()
+    candidate_version = models.CharField(max_length=100)
+    baseline_version = models.CharField(max_length=100)
+    metric = models.CharField(max_length=30, default="MAE")
+    candidate_value = models.DecimalField(max_digits=14, decimal_places=4)
+    baseline_value = models.DecimalField(max_digits=14, decimal_places=4)
+    difference = models.DecimalField(max_digits=14, decimal_places=4)
+    ci_lower = models.DecimalField(max_digits=14, decimal_places=4)
+    ci_upper = models.DecimalField(max_digits=14, decimal_places=4)
+    sample_count = models.PositiveIntegerField()
+    method = models.CharField(max_length=50, default="PAIRED_BOOTSTRAP")
+    is_significant = models.BooleanField(default=False)
+    random_seed = models.PositiveIntegerField(default=42)
+    evaluation_start = models.DateField()
+    evaluation_end = models.DateField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=[
+                    "item",
+                    "horizon_days",
+                    "candidate_version",
+                    "baseline_version",
+                    "metric",
+                ],
+                name="unique_forecast_model_comparison",
+            )
+        ]
+
+
+class MarketRecommendation(models.Model):
+    """예측 결과를 구매 행동 언어로 변환한 검증 가능한 권고."""
+
+    DECISION_CHOICES = [
+        ("BUY", "미리 구매 검토"),
+        ("WATCH", "관망"),
+        ("AVOID", "구매 보류"),
+    ]
+
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="recommendations",
+    )
+    as_of_date = models.DateField()
+    decision = models.CharField(max_length=20, choices=DECISION_CHOICES)
+    summary = models.TextField()
+    action = models.TextField()
+    evidence = models.JSONField(default=list)
+    is_demo = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-as_of_date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item", "as_of_date"],
+                name="unique_market_recommendation",
+            )
+        ]
+
+
+class MarketRankingSnapshot(models.Model):
+    """현재 순위와 이전 순위 이동을 보존하는 랭킹 스냅샷."""
+
+    TYPE_CHOICES = [
+        ("VOLUME", "거래량"),
+        ("TODAY", "오늘 가격 변동"),
+        ("TOMORROW", "내일 예상 변동"),
+    ]
+
+    ranking_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    as_of_date = models.DateField()
+    item = models.ForeignKey(
+        MarketItem,
+        on_delete=models.CASCADE,
+        related_name="ranking_snapshots",
+    )
+    rank = models.PositiveSmallIntegerField()
+    previous_rank = models.PositiveSmallIntegerField(null=True, blank=True)
+    score = models.DecimalField(max_digits=14, decimal_places=4)
+    display_change_rate = models.DecimalField(max_digits=8, decimal_places=4)
+    generated_at = models.DateTimeField(auto_now_add=True)
+    is_demo = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["ranking_type", "as_of_date", "rank"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ranking_type", "as_of_date", "rank"],
+                name="unique_market_ranking_position",
+            ),
+            models.UniqueConstraint(
+                fields=["ranking_type", "as_of_date", "item"],
+                name="unique_market_ranking_item",
+            ),
+        ]

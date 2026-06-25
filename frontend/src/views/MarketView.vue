@@ -1,9 +1,19 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import BossPersona from '@/components/BossPersona.vue'
 
+const router = useRouter()
 const activeScope = ref('briefing')
 const searchQuery = ref('')
+
+function searchItem() {
+  router.push({
+    name: 'MarketRanking',
+    params: { type: 'tomorrow' },
+    query: searchQuery.value.trim() ? { q: searchQuery.value.trim() } : {},
+  })
+}
 
 const annualConsumption = [
   { rank: 1, name: '양파', value: '연동 후 표시', unit: 'kg/인·년' },
@@ -15,27 +25,27 @@ const marketSignals = [
   {
     key: 'volume',
     eyebrow: '실시간 대리 지표',
-    title: '거래량 TOP 3',
+    title: '거래량 TOP 5',
     description: '전국 공영도매시장 거래량·반입량',
-    rows: ['양파', '배추', '대파'],
+    rows: ['양파', '배추', '대파', '감자', '마늘'],
     unit: '톤',
     tone: 'sage',
   },
   {
     key: 'today',
     eyebrow: '오늘 시장',
-    title: '가격 변동 TOP 3',
+    title: '가격 변동 TOP 5',
     description: '직전 유효 거래일 대비 절대 등락률',
-    rows: ['풋고추', '양배추', '마늘'],
+    rows: ['마늘', '양파', '배추', '대파', '감자'],
     unit: '%',
     tone: 'amber',
   },
   {
     key: 'tomorrow',
     eyebrow: 'AI 가격 전망',
-    title: '내일 예상 변동 TOP 3',
+    title: '내일 예상 변동 TOP 5',
     description: '내일 중앙 예측값 기준 예상 등락률',
-    rows: ['양파', '대파', '감자'],
+    rows: ['양파', '대파', '감자', '배추', '마늘'],
     unit: '%',
     tone: 'terracotta',
   },
@@ -97,18 +107,19 @@ const sources = [
     </nav>
 
     <template v-if="activeScope === 'briefing'">
-      <div class="market-search">
+      <form class="market-search" @submit.prevent="searchItem">
         <span>품목 검색</span>
         <input v-model="searchQuery" placeholder="양파, 배추, 대파..." aria-label="시장 품목 검색">
-        <button type="button">검색</button>
-      </div>
+        <button>검색</button>
+      </form>
 
       <section class="market-signal-grid">
-        <article
+        <button
           v-for="signal in marketSignals"
           :key="signal.key"
           class="market-signal-card"
           :class="signal.tone"
+          @click="$router.push(`/market/rankings/${signal.key}`)"
         >
           <div class="market-card-heading">
             <span>{{ signal.eyebrow }}</span>
@@ -124,7 +135,7 @@ const sources = [
             </li>
           </ol>
           <footer>기준일·단위·출처가 연동 후 표시됩니다.</footer>
-        </article>
+        </button>
       </section>
     </template>
 

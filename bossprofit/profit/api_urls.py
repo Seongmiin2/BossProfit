@@ -6,6 +6,31 @@ from . import api_views
 
 urlpatterns = [
     path("dashboard/", api_views.api_dashboard, name="api-dashboard"),
+    path(
+        "public/product-preview/",
+        api_views.api_public_product_preview,
+        name="api-public-product-preview",
+    ),
+    path(
+        "analysis/store/",
+        api_views.api_store_analysis,
+        name="api-store-analysis",
+    ),
+    path(
+        "analysis/report/",
+        api_views.api_analysis_report,
+        name="api-analysis-report",
+    ),
+    path(
+        "analysis/follow-up/",
+        api_views.api_analysis_follow_up,
+        name="api-analysis-follow-up",
+    ),
+    path(
+        "action-plans/",
+        api_views.api_action_plan_create,
+        name="api-action-plan-create",
+    ),
     path("recalculate/", api_views.api_recalculate, name="api-recalculate"),
 
     # Menu CRUD (create/update/delete 먼저, 그 다음 상세/목록)
@@ -29,4 +54,11 @@ urlpatterns = [
 
     # Daily Sales
     path("sales/daily/", api_views.api_daily_sales_upsert, name="api-daily-sales"),
+
+    # Public market intelligence
+    path(
+        "market/rankings/<str:ranking_type>/",
+        api_views.api_market_ranking,
+        name="api-market-ranking",
+    ),
 ]

@@ -18,8 +18,9 @@ const pageTitle = computed(() => ({
   MenuCreate: '메뉴 추가',
   MenuEdit: '메뉴 수정',
   IngredientList: '재료 관리',
-  History: '수익 리포트',
+  History: 'AI 분석 리포트',
   Market: '시장',
+  MarketRanking: '시장 순위',
   Settings: '내 정보',
   Login: '로그인',
   Register: '회원가입',
@@ -50,7 +51,7 @@ const handleLogout = async () => {
         <nav class="desktop-nav" aria-label="주요 메뉴">
           <router-link to="/app">홈</router-link>
           <router-link to="/menus">메뉴</router-link>
-          <router-link to="/history">리포트</router-link>
+          <router-link to="/history">AI 리포트</router-link>
           <router-link v-if="authStore.isLoggedIn" to="/market">시장</router-link>
           <router-link v-if="authStore.isLoggedIn" to="/ingredients">재료</router-link>
         </nav>

@@ -7,6 +7,32 @@ from .models import (
     DailyMenuSale,
     ProfitAssumption,
     MenuProfitSnapshot,
+    MarketForecast,
+    MarketItem,
+    MarketModelMetric,
+    MarketPriceObservation,
+    MarketRankingSnapshot,
+    MarketRecommendation,
+    CropProductionRegion,
+    ForecastCalibration,
+    ForecastComponent,
+    ForecastModelComparison,
+    ForecastPoint,
+    ForecastRun,
+    IngredientMarketMapping,
+    IngestionRun,
+    OutOfFoldForecast,
+    ProductionStatistic,
+    PurchasePriceObservation,
+    RawSourcePayload,
+    ResidualObservation,
+    StoreSalesImport,
+    WeatherExposureFeature,
+    WeatherForecastSnapshot,
+    WeatherObservation,
+    WeatherStationMapping,
+    WholesaleAuctionObservation,
+    ActionPlan,
 )
 
 
@@ -74,3 +100,37 @@ class DailyMenuSaleAdmin(admin.ModelAdmin):
     list_display = ("sale_date", "store", "menu", "channel", "quantity")
     list_filter = ("store", "channel", "sale_date")
     search_fields = ("store__name", "menu__name")
+
+
+@admin.register(MarketItem)
+class MarketItemAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "category", "region", "unit", "is_active")
+    list_filter = ("category", "region", "is_active")
+    search_fields = ("code", "name")
+
+
+admin.site.register(MarketPriceObservation)
+admin.site.register(MarketForecast)
+admin.site.register(MarketModelMetric)
+admin.site.register(MarketRecommendation)
+admin.site.register(MarketRankingSnapshot)
+admin.site.register(CropProductionRegion)
+admin.site.register(ForecastCalibration)
+admin.site.register(ForecastComponent)
+admin.site.register(ForecastModelComparison)
+admin.site.register(ForecastPoint)
+admin.site.register(ForecastRun)
+admin.site.register(IngredientMarketMapping)
+admin.site.register(IngestionRun)
+admin.site.register(OutOfFoldForecast)
+admin.site.register(ProductionStatistic)
+admin.site.register(PurchasePriceObservation)
+admin.site.register(RawSourcePayload)
+admin.site.register(ResidualObservation)
+admin.site.register(StoreSalesImport)
+admin.site.register(WeatherExposureFeature)
+admin.site.register(WeatherForecastSnapshot)
+admin.site.register(WeatherObservation)
+admin.site.register(WeatherStationMapping)
+admin.site.register(WholesaleAuctionObservation)
+admin.site.register(ActionPlan)

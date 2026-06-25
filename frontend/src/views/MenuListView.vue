@@ -1,141 +1,194 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useMenuStore } from '@/stores/menu'
-import { useAuthStore } from '@/stores/auth'
+import { fetchStoreAnalysis } from '@/api/endpoints'
 import { formatKRW } from '@/utils/format'
-import SignalBadge from '@/components/SignalBadge.vue'
-import LoadingSpinner from '@/components/LoadingSpinner.vue'
+import { menuImages } from '@/utils/productAssets'
 
-const menuStore = useMenuStore()
-const authStore = useAuthStore()
-const router = useRouter()
+const payload = ref(null)
+const loading = ref(true)
+const error = ref('')
 const query = ref('')
-const filter = ref('all')
+const activeSegment = ref('sales')
+const selected = ref(null)
 
-onMounted(() => menuStore.loadList())
+const load = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const { data } = await fetchStoreAnalysis()
+    payload.value = data
+    selected.value = data.analysis.top_menus?.[0] || null
+  } catch (e) {
+    error.value = e.response?.data?.detail || e.message
+  } finally {
+    loading.value = false
+  }
+}
 
-const filteredMenus = computed(() => {
+onMounted(load)
+
+const analysis = computed(() => payload.value?.analysis)
+const maxQuantity = computed(() => Math.max(...(analysis.value?.top_menus?.map(item => item.quantity) || [1])))
+const maxRevenue = computed(() => Math.max(...(analysis.value?.menus?.map(item => item.net_revenue) || [1])))
+const filtered = computed(() => {
   const keyword = query.value.trim().toLowerCase()
-  return menuStore.menus.filter((snap) => {
-    const matchesQuery = !keyword
-      || snap.menu.name.toLowerCase().includes(keyword)
-      || snap.menu.category.toLowerCase().includes(keyword)
-    const matchesFilter = filter.value === 'all'
-      || (filter.value === 'good' && snap.signal_color === 'green')
-      || (filter.value === 'care' && snap.signal_color !== 'green')
-    return matchesQuery && matchesFilter
+  const stateBySegment = {
+    sales: 'SALES_LEADER',
+    cost: 'COST_DEFENSE',
+    pending: 'ANALYSIS_PENDING',
+  }
+  return [...(analysis.value?.menus || [])].filter((item) => {
+    const stateMatch = String(item.state).trim() === stateBySegment[activeSegment.value]
+    const queryMatch = !keyword || item.name.toLowerCase().includes(keyword)
+    return stateMatch && queryMatch
   })
 })
-
-const profitableCount = computed(() =>
-  menuStore.menus.filter((snap) => snap.signal_color === 'green').length
-)
-
-const goToDetail = (menuId) => {
-  router.push({ name: 'MenuDetail', params: { menuId } })
-}
+const tabCounts = computed(() => ({
+  SALES_LEADER: analysis.value?.menus?.filter(item => item.state === 'SALES_LEADER').length || 0,
+  COST_DEFENSE: analysis.value?.menus?.filter(item => item.state === 'COST_DEFENSE').length || 0,
+  ANALYSIS_PENDING: analysis.value?.menus?.filter(item => item.state === 'ANALYSIS_PENDING').length || 0,
+}))
+const trendText = (value) => value == null ? '비교 가능한 기록 부족' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
 </script>
 
 <template>
-  <div class="menu-list-page">
-    <section class="page-intro">
-      <div>
-        <span class="section-kicker">메뉴 수익 탐색</span>
-        <h1>어떤 메뉴가<br>가게를 키우고 있을까요?</h1>
-        <p>판매량뿐 아니라 실제로 남는 이익까지 함께 살펴보세요.</p>
-      </div>
-      <router-link v-if="authStore.isLoggedIn" to="/menus/create" class="primary-button">
-        + 새 메뉴
-      </router-link>
-    </section>
+  <div class="bp-menu-analysis">
+    <div v-if="loading" class="bp-state-panel"><div class="spinner"></div><strong>실제 판매자료를 분석하고 있습니다.</strong></div>
+    <div v-else-if="error" class="bp-state-panel error"><strong>메뉴 분석을 불러오지 못했습니다.</strong><p>{{ error }}</p><button @click="load">다시 시도</button></div>
 
-    <section class="menu-overview-strip">
-      <div>
-        <span>전체 메뉴</span>
-        <strong>{{ menuStore.menus.length }}개</strong>
-      </div>
-      <div>
-        <span>건강한 메뉴</span>
-        <strong>{{ profitableCount }}개</strong>
-      </div>
-      <div>
-        <span>관리 추천</span>
-        <strong>{{ menuStore.menus.length - profitableCount }}개</strong>
-      </div>
-    </section>
+    <template v-else-if="analysis">
+      <header class="bp-page-header">
+        <div>
+          <span class="bp-kicker">MENU PORTFOLIO</span>
+          <h1>어떤 메뉴가 가장 많이 팔리고 있을까요?</h1>
+          <p>판매 흐름과 재료가격 위험을 함께 확인하세요.</p>
+        </div>
+        <router-link to="/menus/create" class="bp-outline-button">메뉴 추가</router-link>
+      </header>
 
-    <div class="menu-toolbar">
-      <label class="search-box">
-        <span>⌕</span>
-        <input v-model="query" type="search" placeholder="메뉴명이나 카테고리 검색">
-      </label>
-      <div class="filter-tabs">
-        <button :class="{ active: filter === 'all' }" @click="filter = 'all'">전체</button>
-        <button :class="{ active: filter === 'good' }" @click="filter = 'good'">건강</button>
-        <button :class="{ active: filter === 'care' }" @click="filter = 'care'">관리 추천</button>
-      </div>
-    </div>
+      <section class="bp-menu-stats">
+        <article><span>분석기간</span><strong>{{ analysis.period.from }}<br>~ {{ analysis.period.to }}</strong></article>
+        <article><span>음식 메뉴</span><strong>{{ analysis.summary.food_menu_count }}개</strong></article>
+        <article class="primary"><span>음식 판매량</span><strong>{{ analysis.summary.food_quantity.toLocaleString() }}개</strong></article>
+        <article><span>음식 실매출</span><strong>{{ formatKRW(analysis.summary.food_net_revenue) }}원</strong></article>
+        <article><span>판매량 1위</span><strong>{{ analysis.summary.top_food_menu?.name }}</strong></article>
+        <article><span>가격위험 분석 가능</span><strong>{{ analysis.summary.price_risk_ready_menu_count }}개</strong></article>
+      </section>
 
-    <div v-if="menuStore.loading" class="state-card compact-state">
-      <LoadingSpinner />
-      <strong>메뉴를 정리하고 있어요</strong>
-    </div>
+      <section class="bp-analysis-panel">
+        <header><div><span>판매량 TOP 5</span><h2>실제 POS 판매성과</h2></div><small>단위: 개 · {{ analysis.period.from }}~{{ analysis.period.to }}</small></header>
+        <div class="bp-horizontal-bars">
+          <button v-for="menu in analysis.top_menus" :key="menu.menu_id" @click="selected = menu">
+            <span>{{ menu.rank }}</span><strong>{{ menu.name }}</strong>
+            <i><b :style="{ width: `${(menu.quantity / maxQuantity) * 100}%` }"></b></i>
+            <em>{{ menu.quantity.toLocaleString() }}개</em>
+          </button>
+        </div>
+      </section>
 
-    <div v-else-if="menuStore.error" class="state-card compact-state state-error">
-      <span>!</span>
-      <strong>메뉴를 불러오지 못했어요</strong>
-      <p>{{ menuStore.error }}</p>
-    </div>
-
-    <div v-else-if="filteredMenus.length" class="menu-grid modern-menu-grid">
-      <button
-        v-for="snap in filteredMenus"
-        :key="snap.menu.menu_id"
-        class="menu-card modern-menu-card"
-        @click="goToDetail(snap.menu.menu_id)"
-      >
-        <div class="menu-card-head">
-          <div class="menu-card-identity">
-            <span class="menu-symbol">{{ snap.menu.name.charAt(0) }}</span>
-            <div>
-              <div class="menu-card-name">{{ snap.menu.name }}</div>
-              <div class="menu-card-meta">{{ snap.menu.category }} · 월 {{ snap.menu.monthly_orders }}건</div>
+      <section class="bp-two-column bp-chart-row">
+        <article class="bp-analysis-panel">
+          <header><div><span>월별 판매량·실매출</span><h2>판매 흐름</h2></div><small>기록이 있는 날만 집계</small></header>
+          <div class="bp-month-columns">
+            <div v-for="row in analysis.monthly_trend" :key="row.month">
+              <i :style="{ height: `${Math.max(8, (row.quantity / Math.max(...analysis.monthly_trend.map(x => x.quantity))) * 100)}%` }"></i>
+              <strong>{{ row.quantity.toLocaleString() }}</strong>
+              <span>{{ row.month.slice(5, 7) }}월</span>
+              <small>{{ formatKRW(row.net_revenue) }}원</small>
             </div>
           </div>
-          <SignalBadge :signal="snap.signal" :signal-color="snap.signal_color" />
-        </div>
+        </article>
 
-        <div class="menu-profit-line">
-          <div>
-            <span>월 예상 이익</span>
-            <strong :class="{ negative: snap.monthly_profit < 0 }">
-              {{ formatKRW(snap.monthly_profit) }}원
-            </strong>
+        <article class="bp-analysis-panel">
+          <header><div><span>AI 핵심 판단</span><h2>판매성과와 원가위험을 분리합니다</h2></div></header>
+          <div class="bp-insight-copy">
+            <strong>{{ analysis.summary.top_food_menu?.name }}가 음식 판매량 1위입니다.</strong>
+            <p>{{ analysis.summary.top_food_menu?.quantity.toLocaleString() }}개 판매됐지만 원가와 고정비가 충분하지 않아 ‘효자 메뉴’라고 판단하지 않습니다.</p>
+            <div><span>판매 주력</span><b>판매량·실매출 근거</b></div>
+            <div><span>원가 방어</span><b>레시피·시장가격 연결 필요</b></div>
+            <div><span>분석 대기</span><b>부족한 데이터 표시</b></div>
           </div>
-          <span class="card-arrow">›</span>
-        </div>
+        </article>
+      </section>
 
-        <div class="menu-card-grid">
-          <div>
-            <span class="label">판매가</span>
-            <span class="val">{{ formatKRW(snap.menu.price) }}원</span>
-          </div>
-          <div>
-            <span class="label">원가율</span>
-            <span class="val">{{ (snap.food_cost_rate * 100).toFixed(1) }}%</span>
-          </div>
-          <div>
-            <span class="label">1건당 마진</span>
-            <span class="val">{{ formatKRW(snap.weighted_margin) }}원</span>
-          </div>
+      <section class="bp-analysis-panel">
+        <header><div><span>메뉴 포트폴리오</span><h2>판매량과 실매출 비교</h2></div><small>원 크기: 최근 30일 판매량</small></header>
+        <div class="bp-scatter">
+          <span class="axis-y">실매출 ↑</span>
+          <button
+            v-for="menu in analysis.menus.slice(0, 20)"
+            :key="menu.menu_id"
+            :title="`${menu.name}: ${menu.quantity}개 / ${formatKRW(menu.net_revenue)}원`"
+            :style="{
+              left: `${Math.max(4, Math.min(94, (menu.quantity / maxQuantity) * 92))}%`,
+              bottom: `${Math.max(5, Math.min(90, (menu.net_revenue / maxRevenue) * 88))}%`,
+              width: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
+              height: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
+            }"
+            :class="menu.state.toLowerCase()"
+            @click="selected = menu"
+          >{{ menu.rank <= 5 ? menu.rank : '' }}</button>
+          <span class="axis-x">판매량 →</span>
         </div>
-      </button>
-    </div>
+      </section>
 
-    <div v-else class="state-card compact-state">
-      <strong>조건에 맞는 메뉴가 없어요</strong>
-      <p>검색어나 필터를 바꿔보세요.</p>
-    </div>
+      <section class="bp-menu-browser">
+        <header>
+          <div class="bp-tab-row">
+            <button :class="{ active: activeSegment === 'sales' }" @click="activeSegment = 'sales'">판매 주력 {{ tabCounts.SALES_LEADER }}</button>
+            <button :class="{ active: activeSegment === 'cost' }" @click="activeSegment = 'cost'">원가 방어 {{ tabCounts.COST_DEFENSE }}</button>
+            <button :class="{ active: activeSegment === 'pending' }" @click="activeSegment = 'pending'">분석 대기 {{ tabCounts.ANALYSIS_PENDING }}</button>
+          </div>
+          <input v-model="query" type="search" placeholder="메뉴 검색">
+        </header>
+
+        <div v-if="filtered.length" class="bp-photo-menu-grid">
+          <button v-for="menu in filtered" :key="menu.menu_id" @click="selected = menu">
+            <img v-if="menu.image_key" :src="menuImages[menu.image_key]" :alt="menu.name">
+            <span v-else class="bp-photo-placeholder">{{ menu.name.slice(0, 1) }}</span>
+            <div class="bp-menu-card-body">
+              <span>{{ menu.state_label }} · {{ menu.state_reason }}</span>
+              <h3>{{ menu.name }}</h3>
+              <dl>
+                <div><dt>6개월 판매량</dt><dd>{{ menu.quantity.toLocaleString() }}개</dd></div>
+                <div><dt>누적 실매출</dt><dd>{{ formatKRW(menu.net_revenue) }}원</dd></div>
+                <div><dt>최근 30일</dt><dd>{{ menu.recent_30d_quantity == null ? '기록 없음' : `${menu.recent_30d_quantity}개` }}</dd></div>
+                <div><dt>판매 추세</dt><dd>{{ trendText(menu.trend_rate) }}</dd></div>
+              </dl>
+              <p>{{ menu.profitability_message || '레시피와 시장가격을 연결해 원가 위험을 계산했습니다.' }}</p>
+              <b>판단 근거 보기 →</b>
+            </div>
+          </button>
+        </div>
+        <div v-else class="bp-inline-empty">
+          <strong>{{ activeSegment === 'cost' ? '원가 위험을 계산할 수 있는 메뉴가 없습니다.' : '조건에 맞는 메뉴가 없습니다.' }}</strong>
+          <p>{{ activeSegment === 'cost' ? '메뉴 레시피와 시장 품목을 연결해주세요.' : '검색어를 지워주세요.' }}</p>
+        </div>
+      </section>
+
+      <section v-if="selected" class="bp-menu-detail-panel">
+        <div class="bp-detail-visual">
+          <img v-if="selected.image_key" :src="menuImages[selected.image_key]" :alt="selected.name">
+          <span v-else>{{ selected.name.slice(0, 1) }}</span>
+        </div>
+        <div class="bp-detail-content">
+          <span>{{ selected.state_label }} · {{ selected.state_reason }}</span>
+          <h2>{{ selected.name }}</h2>
+          <div class="bp-detail-metrics">
+            <div><small>누적 판매량</small><strong>{{ selected.quantity.toLocaleString() }}개</strong></div>
+            <div><small>누적 실매출</small><strong>{{ formatKRW(selected.net_revenue) }}원</strong></div>
+            <div><small>평균 판매단가</small><strong>{{ formatKRW(selected.average_selling_price) }}원</strong></div>
+            <div><small>할인금액</small><strong>{{ formatKRW(selected.discount_amount) }}원</strong></div>
+          </div>
+          <div class="bp-data-gap">
+            <strong>데이터 상태</strong>
+            <p>{{ selected.recipe.reason || '레시피와 시장 품목이 연결됐습니다.' }}</p>
+          </div>
+          <router-link :to="`/menus/${selected.menu_id}`">상세 분석 화면 열기 →</router-link>
+        </div>
+      </section>
+
+      <p class="bp-data-rule">메뉴 사진은 정확히 일치하는 5개 메뉴에만 적용했습니다. 다른 메뉴에는 임의의 음식 사진을 사용하지 않았습니다.</p>
+    </template>
   </div>
 </template>
