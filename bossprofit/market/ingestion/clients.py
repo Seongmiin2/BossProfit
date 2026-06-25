@@ -20,7 +20,10 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError
 
 from django.conf import settings
 
@@ -65,15 +68,32 @@ class FixtureKamisDailyClient(BaseKamisDailyClient):
         return out
 
 
-class KamisApiDailyClient(BaseKamisDailyClient):
-    """실제 KAMIS Open API 클라이언트.
+def _kamis_price(raw) -> Optional[str]:
+    """KAMIS 가격 문자열('2,311')을 Decimal 문자열로. '-'/빈값/0은 None."""
+    if raw is None or isinstance(raw, (list, dict)):
+        return None
+    s = str(raw).replace(",", "").strip()
+    if not s or s in ("-", "0"):
+        return None
+    try:
+        return str(float(s))
+    except ValueError:
+        return None
 
-    settings.KAMIS_CERT_KEY/ID 가 설정돼야 동작한다. 응답 파싱은 기존
-    profit.market_price 의 검증된 헬퍼를 재사용한다. (MVP: 일자별 단일 조회를
-    범위만큼 반복; 호출량은 상위 run의 파라미터로 제어)
+
+class KamisApiDailyClient(BaseKamisDailyClient):
+    """실제 KAMIS Open API 클라이언트 (periodProductList).
+
+    settings.KAMIS_CERT_KEY/ID 가 설정돼야 동작한다. periodProductList 로
+    기간 일별 가격 시계열을 한 번에 받아 표준 정규화 행으로 반환한다.
+    KAMIS는 https + 브라우저 UA만 응답한다(http/기본 UA는 차단).
     """
 
-    BASE_URL = "https://www.kamis.or.kr/service/price/xml.do?action=dailyPriceByCategoryList"
+    BASE_URL = "https://www.kamis.or.kr/service/price/xml.do"
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    )
 
     def __init__(self, cert_key: str | None = None, cert_id: str | None = None):
         self.cert_key = cert_key or getattr(settings, "KAMIS_CERT_KEY", "")
@@ -82,9 +102,60 @@ class KamisApiDailyClient(BaseKamisDailyClient):
     def fetch_daily(self, item, start: date, end: date) -> list[dict]:
         if not (self.cert_key and self.cert_id):
             return []
-        # 실제 호출 로직은 별도 티켓(B-02 확장)에서 구현. 여기서는 인터페이스만 고정.
-        # 데모/테스트는 FixtureKamisDailyClient를 사용한다.
-        return []
+        if not (item.source_category_code and item.source_item_code):
+            return []
+
+        params = {
+            "action": "periodProductList",
+            "p_cert_key": self.cert_key,
+            "p_cert_id": self.cert_id,
+            "p_returntype": "json",
+            "p_startday": start.strftime("%Y-%m-%d"),
+            "p_endday": end.strftime("%Y-%m-%d"),
+            "p_itemcategorycode": item.source_category_code,
+            "p_itemcode": item.source_item_code,
+            "p_productrankcode": "04",        # 상품
+            "p_countrycode": "1101",          # 서울(평균)
+            "p_convert_kg_yn": "Y",           # 1kg 환산가
+            "p_productclscode": "01",         # 01 소매
+        }
+        if item.source_kind_code:
+            params["p_kindcode"] = item.source_kind_code
+
+        url = f"{self.BASE_URL}?{urlencode(params)}"
+        req = Request(url, headers={"User-Agent": self.USER_AGENT})
+        try:
+            with urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (URLError, ValueError, TimeoutError, OSError):
+            return []
+
+        data = payload.get("data")
+        if not isinstance(data, dict) or data.get("error_code") not in ("000", 0):
+            return []
+        items = data.get("item")
+        if isinstance(items, dict):
+            items = [items]
+        if not items:
+            return []
+
+        out = []
+        for it in items:
+            yyyy, regday = it.get("yyyy"), it.get("regday")
+            price = _kamis_price(it.get("price"))
+            if not yyyy or not regday or price is None or "/" not in str(regday):
+                continue
+            mm, dd = str(regday).split("/")
+            out.append({
+                "observation_date": f"{yyyy}-{int(mm):02d}-{int(dd):02d}",
+                "region": "",
+                "market_type": "retail",
+                "grade": "",
+                "unit": item.standard_unit,
+                "price": price,
+                "raw_ref": f"kamis:period:{item.source_item_code}:{yyyy}-{mm}-{dd}",
+            })
+        return out
 
 
 def get_daily_client() -> BaseKamisDailyClient:
