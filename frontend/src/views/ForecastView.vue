@@ -16,10 +16,25 @@ const confidenceColor = { HIGH: '#2f9e44', MEDIUM: '#f08c00', LOW: '#e03131' }
 const categoryFilter = ref('전체')
 
 onMounted(async () => {
-  await store.loadIngredients()
-  const first = store.ingredients.find((i) => i.market_code)
-  if (first) await store.loadDetail(first.market_code)
+  await Promise.all([store.loadIngredients(), store.loadCommodities()])
+  // 실데이터 예측(commodity)이 있으면 차트 기본 선택, 없으면 첫 재료
+  if (store.commodities.length) {
+    await store.loadDetail(store.commodities[0].code)
+  } else {
+    const first = store.ingredients.find((i) => i.market_code)
+    if (first) await store.loadDetail(first.market_code)
+  }
 })
+
+const commodityCodes = computed(() => new Set(store.commodities.map((c) => c.code)))
+const activeIsCommodity = computed(
+  () => !!store.detail && commodityCodes.value.has(store.detail.item.code)
+)
+const commodityPoints = computed(() => (activeIsCommodity.value ? store.detail.points : []))
+
+async function selectCommodity(code) {
+  await store.loadDetail(code)
+}
 
 const categories = computed(() => {
   const set = new Set((store.ingredients || []).map((i) => i.category).filter(Boolean))
@@ -105,9 +120,55 @@ const chartOptions = {
       {{ store.error }}
     </div>
 
+    <!-- 📡 실시세·실기상 반영 예측 (KAMIS · 기상청 ASOS) -->
+    <div v-if="store.commodities.length" style="background:linear-gradient(135deg,#e7f5ff,#f3f0ff);border:1px solid #d0ebff;border-radius:8px;padding:16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <strong style="font-size:1.05rem;">📡 실시세·실기상 반영 예측</strong>
+        <span style="background:#1c7ed6;color:#fff;font-size:0.7rem;padding:2px 8px;border-radius:10px;">KAMIS · 기상청 ASOS</span>
+      </div>
+      <p style="margin:0 0 12px;font-size:0.82rem;color:#495057;">
+        실제 시세·주산지 기상 관측을 반영한 품목 예측입니다. <b>기본예측 + 기상보정(실 ASOS) + 잔차보정 = 최종 예측</b>.
+      </p>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button v-for="c in store.commodities" :key="c.code" @click="selectCommodity(c.code)"
+          :style="{
+            padding:'5px 14px', borderRadius:'14px', cursor:'pointer', fontSize:'0.85rem',
+            border:'1px solid ' + (store.selectedCode===c.code ? '#1c7ed6' : '#d0ebff'),
+            background: store.selectedCode===c.code ? '#1c7ed6' : '#fff',
+            color: store.selectedCode===c.code ? '#fff' : '#1c7ed6',
+          }">
+          {{ c.name }}
+        </button>
+      </div>
+
+      <div v-if="commodityPoints.length" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
+        <div v-for="p in commodityPoints" :key="p.horizon_days"
+             style="background:#fff;border:1px solid #d0ebff;border-radius:6px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <strong>{{ p.horizon_days }}일 후</strong>
+            <span :style="{background: confidenceColor[p.confidence], color:'#fff', padding:'2px 9px', borderRadius:'10px', fontSize:'0.72rem'}">
+              신뢰 {{ confidenceLabel[p.confidence] }}
+            </span>
+          </div>
+          <div style="font-size:1.5rem;font-weight:700;color:#1c7ed6;margin-bottom:10px;">{{ p.median }} <span style="font-size:0.8rem;color:#adb5bd;">원/{{ store.detail.item.unit }}</span></div>
+          <table style="width:100%;font-size:0.82rem;border-collapse:collapse;">
+            <tr><td style="color:#868e96;padding:2px 0;">기본 예측</td><td style="text-align:right;">{{ p.base_prediction }}</td></tr>
+            <tr><td style="color:#1c7ed6;padding:2px 0;font-weight:600;">+ 기상보정 (ASOS)</td>
+              <td style="text-align:right;color:#1c7ed6;font-weight:600;">{{ Number(p.weather_adjustment) >= 0 ? '+' : '' }}{{ p.weather_adjustment }}</td></tr>
+            <tr><td style="color:#868e96;padding:2px 0;">+ 잔차 보정</td>
+              <td style="text-align:right;" :style="{opacity: p.stage_flags?.residual_disabled ? 0.4 : 1}">
+                {{ Number(p.residual_adjustment) >= 0 ? '+' : '' }}{{ p.residual_adjustment }}</td></tr>
+            <tr style="border-top:1px solid #e9ecef;"><td style="padding:4px 0;font-weight:700;">= 최종</td><td style="text-align:right;font-weight:700;">{{ p.median }}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div v-if="store.listLoading" style="padding:40px;text-align:center;color:#868e96;">불러오는 중…</div>
 
     <template v-else>
+      <h2 style="font-size:1.05rem;margin:8px 0 12px;">🔮 내 재료별 예측 <span style="font-size:0.8rem;color:#adb5bd;font-weight:400;">(합성 시세 기반 추세)</span></h2>
       <!-- 차트: 선택된 재료 -->
       <div style="background:#fff;border:1px solid #e9ecef;border-radius:4px;padding:16px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">

@@ -53,13 +53,17 @@ def _store_required(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def api_forecast_items(request):
-    """예측이 1건 이상 생성된 품목 목록."""
+    """예측이 1건 이상 생성된 실 시장품목 목록(합성 재료품목 ING-* 제외)."""
     item_ids = (
         ForecastRun.objects.filter(status="success")
         .values_list("item_id", flat=True)
         .distinct()
     )
-    items = MarketItem.objects.filter(id__in=list(item_ids)).order_by("name")
+    items = (
+        MarketItem.objects.filter(id__in=list(item_ids))
+        .exclude(source="manual")  # 매장 재료별 합성 품목(ING-*) 제외
+        .order_by("name")
+    )
     return Response(
         [
             {
