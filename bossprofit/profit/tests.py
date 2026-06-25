@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 from accounts.models import Store, StoreMember, OnboardingProgress
 from .models import (
     Ingredient,
+    IngredientMarketMapping,
     Menu,
     RecipeItem,
     DailyMenuSale,
@@ -448,6 +449,63 @@ class StoreAnalysisApiTests(APITestCase):
             "INSUFFICIENT",
         )
         self.assertNotContains(response, "노출 금지 메뉴")
+
+    def test_store_market_ranking_excludes_unrelated_market_items(self):
+        cabbage = MarketItem.objects.create(
+            code="KAMIS:CABBAGE",
+            name="배추",
+            category="채소",
+            unit="1포기",
+        )
+        MarketRankingSnapshot.objects.create(
+            ranking_type="TOMORROW",
+            as_of_date=timezone.localdate(),
+            item=cabbage,
+            rank=1,
+            score=Decimal("20.8"),
+            display_change_rate=Decimal("0.208"),
+        )
+        self.client.force_authenticate(self.user)
+
+        response = self.client.get(reverse("api-store-analysis"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["market_risks"]["state"], "INSUFFICIENT")
+        self.assertEqual(response.data["market_risks"]["items"], [])
+        self.assertNotContains(response, "배추")
+
+        ingredient = Ingredient.objects.create(
+            store=self.store,
+            ingredient_id="CABBAGE",
+            name="배추",
+            category="공통",
+            purchase_quantity=1,
+            purchase_price=3000,
+            unit="ea",
+        )
+        RecipeItem.objects.create(
+            menu=self.menu,
+            ingredient=ingredient,
+            quantity=1,
+        )
+        IngredientMarketMapping.objects.create(
+            ingredient=ingredient,
+            market_item=cabbage,
+            confidence=Decimal("1"),
+            status="CONFIRMED",
+        )
+
+        response = self.client.get(reverse("api-store-analysis"))
+
+        self.assertEqual(response.data["market_risks"]["state"], "SUCCESS")
+        self.assertEqual(
+            response.data["market_risks"]["items"][0]["item"]["name"],
+            "배추",
+        )
+        self.assertEqual(
+            response.data["market_risks"]["items"][0]["affected_menus"][0]["name"],
+            "돈까스",
+        )
 
     def test_action_plan_is_scoped_to_authenticated_store(self):
         self.client.force_authenticate(self.user)
