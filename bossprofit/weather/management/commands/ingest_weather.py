@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from weather.models import WeatherStation
 from weather.ingestion.service import (
-    FixtureForecastClient, get_asos_client,
+    get_asos_client, get_forecast_client,
     ingest_weather_observations, ingest_forecast_snapshots,
 )
 
@@ -51,7 +51,9 @@ class Command(BaseCommand):
         ))
 
         if opts["forecast"]:
-            frun = ingest_forecast_snapshots(client=FixtureForecastClient())
+            fclient = get_forecast_client()
+            self.stdout.write(f"예보 클라이언트: {type(fclient).__name__}")
+            frun = ingest_forecast_snapshots(client=fclient)
             self.stdout.write(self.style.SUCCESS(
                 f"[예보 {frun.status}] fetched={frun.fetched_count} created={frun.created_count} "
                 f"updated={frun.updated_count}"

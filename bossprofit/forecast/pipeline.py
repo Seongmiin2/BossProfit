@@ -8,7 +8,7 @@ as_of 시점까지의 데이터만으로 (point-in-time):
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 import numpy as np
@@ -17,7 +17,10 @@ import pandas as pd
 from .data import load_price_series, load_volume_series
 from .base_models import LightGBMQuantileForecaster
 from .baselines import LastValueForecaster
-from .weather_features import load_item_weather, build_weather_exposure, sensitive_growth_doys
+from .weather_features import (
+    load_item_weather, load_item_forecast_weather,
+    build_weather_exposure, sensitive_growth_doys,
+)
 from .weather_model import detect_weather_shocks
 from .residuals import load_residuals
 from .residual_model import build_residual_training_table, ResidualCorrector
@@ -54,10 +57,23 @@ def produce_forecast(
     if price.empty:
         return {"ok": False, "reason": "no_price"}
     volume = load_volume_series(item, end=as_of)
+    growth_doy = sensitive_growth_doys(item)
     wdf = load_item_weather(item, end=as_of)
-    exposure = build_weather_exposure(wdf, growth_doy=sensitive_growth_doys(item)) if not wdf.empty else pd.DataFrame()
-    shocks = detect_weather_shocks(exposure) if not exposure.empty else set()
-    extreme = as_of in shocks
+    # 가격 모델용 노출은 과거 관측만 사용한다(미래 예보를 feature로 넣지 않음 = 누수 방지).
+    exposure = build_weather_exposure(wdf, growth_doy=growth_doy) if not wdf.empty else pd.DataFrame()
+
+    # 미래 기상 예보(단기예보)는 충격 감지·신뢰등급에만 결합한다(point-in-time: issued<=as_of).
+    fc_wdf, fc_issued = load_item_forecast_weather(item, as_of, max(horizons))
+    if not fc_wdf.empty and not wdf.empty:
+        combined = pd.concat([wdf, fc_wdf])
+        combined = combined[~combined.index.duplicated(keep="last")].sort_index()
+        shock_exposure = build_weather_exposure(combined, growth_doy=growth_doy)
+    elif not fc_wdf.empty:
+        shock_exposure = build_weather_exposure(fc_wdf, growth_doy=growth_doy)
+    else:
+        shock_exposure = exposure
+    shocks = detect_weather_shocks(shock_exposure) if not shock_exposure.empty else set()
+    past_extreme = as_of in shocks
     n_hist = len(price)
 
     base_model = LightGBMQuantileForecaster(horizons=tuple(horizons), volume=volume).fit(price)
@@ -108,6 +124,10 @@ def produce_forecast(
             d = float(np.quantile(err, 0.8, method="higher"))
             lo, hi = median - d, median + d
 
+        # 극한기상: as_of 당일 충격 + (as_of, as_of+h] 구간의 예보 충격
+        h_end = as_of + timedelta(days=h)
+        extreme = past_extreme or any(as_of < d <= h_end for d in shocks)
+
         width = hi - lo
         grade = confidence_grade(n_hist, width, median, extreme=extreme)
         lo, hi = widen_for_low_confidence(lo, hi, median, grade)
@@ -135,6 +155,7 @@ def produce_forecast(
     result = {"ok": True, "item": item.code, "as_of": as_of.isoformat(), "points": points,
               "model_versions": versions}
     if persist:
-        run = persist_forecast(item, as_of, points, versions)
+        run = persist_forecast(item, as_of, points, versions,
+                               weather_forecast_issued_at=fc_issued)
         result["run_id"] = run.id
     return result

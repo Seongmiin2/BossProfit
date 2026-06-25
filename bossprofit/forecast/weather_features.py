@@ -18,6 +18,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from django.utils import timezone
 
 WEATHER_VARS = ["tavg", "tmin", "tmax", "rain", "humidity", "sunshine", "soil_moisture"]
 GDD_BASE = 10.0          # 생육도일 기준온도
@@ -99,6 +100,100 @@ def load_item_weather(item, start: Optional[date] = None, end: Optional[date] = 
         with np.errstate(invalid="ignore"):
             out[v] = np.where(den > 0, num / den, np.nan)
     return out.sort_index()
+
+
+def load_item_forecast_weather(item, as_of: date, horizon: int):
+    """품목의 주산지 미래 기상 예보 DataFrame(컬럼=WEATHER_VARS).
+
+    point-in-time 보장: as_of 시점까지 발행된(issued_at <= as_of) 예보만 사용하고,
+    (as_of, as_of+horizon] 구간 valid_at만 반환한다. 같은 (관측소, valid_at)에
+    여러 발행본이 있으면 가장 최근 발행본을 쓴다.
+    반환: (DataFrame, 사용된 최신 issued_at 또는 None)
+    """
+    from datetime import timedelta
+    from market.models import CropProductionRegion
+    from weather.models import WeatherStationMapping, WeatherForecastSnapshot
+
+    region_shares = list(
+        CropProductionRegion.objects.filter(item=item).select_related("region")
+    )
+    if not region_shares:
+        return pd.DataFrame(), None
+
+    end = as_of + timedelta(days=horizon)
+    latest_issued = None
+    region_frames, region_weights = [], []
+
+    for cpr in region_shares:
+        mappings = list(
+            WeatherStationMapping.objects.filter(region=cpr.region).select_related("station")
+        )
+        if not mappings:
+            continue
+        station_ids = [m.station_id for m in mappings]
+        st_weight = {m.station_id: m.weight for m in mappings}
+
+        qs = (
+            WeatherForecastSnapshot.objects.filter(
+                station_id__in=station_ids,
+                valid_at__gt=as_of, valid_at__lte=end,
+            )
+            .order_by("issued_at")
+            .values("station_id", "valid_at", "variables", "issued_at")
+        )
+        # point-in-time: 발행일이 as_of 당일 이하인 예보만(아직 발행 안 된 예보 차단)
+        rows = [
+            r for r in qs
+            if r["issued_at"] is None or timezone.localtime(r["issued_at"]).date() <= as_of
+        ]
+        if not rows:
+            continue
+
+        # (관측소, valid_at) 별 최신 발행본만
+        dedup = {}
+        for r in rows:
+            dedup[(r["station_id"], r["valid_at"])] = r
+        recs = []
+        for r in dedup.values():
+            if r["issued_at"] and (latest_issued is None or r["issued_at"] > latest_issued):
+                latest_issued = r["issued_at"]
+            rec = {"date": r["valid_at"], "w": st_weight.get(r["station_id"], 1.0)}
+            for v in WEATHER_VARS:
+                rec[v] = r["variables"].get(v)
+            recs.append(rec)
+        sdf = pd.DataFrame(recs)
+        sdf["date"] = pd.to_datetime(sdf["date"])
+
+        agg = {}
+        for v in WEATHER_VARS:
+            vals = sdf[["date", v, "w"]].dropna(subset=[v])
+            if vals.empty:
+                continue
+            num = vals.assign(wv=vals[v] * vals["w"]).groupby("date")["wv"].sum()
+            den = vals.groupby("date")["w"].sum()
+            agg[v] = num / den
+        if not agg:
+            continue
+        region_frames.append(pd.DataFrame(agg))
+        region_weights.append(cpr.weight)
+
+    if not region_frames:
+        return pd.DataFrame(), latest_issued
+
+    all_dates = sorted(set().union(*[f.index for f in region_frames]))
+    out = pd.DataFrame(index=pd.DatetimeIndex(all_dates))
+    for v in WEATHER_VARS:
+        num = pd.Series(0.0, index=out.index)
+        den = pd.Series(0.0, index=out.index)
+        for f, w in zip(region_frames, region_weights):
+            if v in f.columns:
+                col = f[v].reindex(out.index)
+                mask = col.notna()
+                num[mask] += col[mask] * w
+                den[mask] += w
+        with np.errstate(invalid="ignore"):
+            out[v] = np.where(den > 0, num / den, np.nan)
+    return out.sort_index(), latest_issued
 
 
 def build_weather_exposure(weather: pd.DataFrame, growth_doy: Optional[set] = None) -> pd.DataFrame:

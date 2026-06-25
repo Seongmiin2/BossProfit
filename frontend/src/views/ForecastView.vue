@@ -31,6 +31,13 @@ const activeIsCommodity = computed(
   () => !!store.detail && commodityCodes.value.has(store.detail.item.code)
 )
 const commodityPoints = computed(() => (activeIsCommodity.value ? store.detail.points : []))
+const forecastIssued = computed(() => {
+  const p = commodityPoints.value[0]
+  if (!p || !p.weather_forecast_issued_at) return null
+  return new Date(p.weather_forecast_issued_at).toLocaleString('ko-KR', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+})
 
 async function selectCommodity(code) {
   await store.loadDetail(code)
@@ -126,8 +133,11 @@ const chartOptions = {
         <strong style="font-size:1.05rem;">📡 실시세·실기상 반영 예측</strong>
         <span style="background:#1c7ed6;color:#fff;font-size:0.7rem;padding:2px 8px;border-radius:10px;">KAMIS · 기상청 ASOS</span>
       </div>
-      <p style="margin:0 0 12px;font-size:0.82rem;color:#495057;">
+      <p style="margin:0 0 8px;font-size:0.82rem;color:#495057;">
         실제 시세·주산지 기상 관측을 반영한 품목 예측입니다. <b>기본예측 + 기상보정(실 ASOS) + 잔차보정 = 최종 예측</b>.
+      </p>
+      <p v-if="forecastIssued" style="margin:0 0 12px;font-size:0.78rem;color:#1971c2;">
+        🌧️ 단기예보(기상청) 반영 — {{ forecastIssued }} 발행본 기준, 예보 구간 극한기상 시 예측구간↑·신뢰등급↓
       </p>
 
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">

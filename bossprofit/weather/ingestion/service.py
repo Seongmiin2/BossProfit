@@ -231,6 +231,169 @@ class FixtureForecastClient(BaseForecastClient):
         return self._data
 
 
+def _latlon_to_grid(lat: float, lon: float):
+    """위경도 → 기상청 단기예보 격자(nx, ny). KMA LCC 투영 공식."""
+    import math
+    RE, GRID = 6371.00877, 5.0
+    SLAT1, SLAT2, OLON, OLAT, XO, YO = 30.0, 60.0, 126.0, 38.0, 43, 136
+    DEGRAD = math.pi / 180.0
+    re = RE / GRID
+    slat1, slat2 = SLAT1 * DEGRAD, SLAT2 * DEGRAD
+    olon, olat = OLON * DEGRAD, OLAT * DEGRAD
+    sn = math.tan(math.pi * 0.25 + slat2 * 0.5) / math.tan(math.pi * 0.25 + slat1 * 0.5)
+    sn = math.log(math.cos(slat1) / math.cos(slat2)) / math.log(sn)
+    sf = math.tan(math.pi * 0.25 + slat1 * 0.5)
+    sf = sf ** sn * math.cos(slat1) / sn
+    ro = math.tan(math.pi * 0.25 + olat * 0.5)
+    ro = re * sf / ro ** sn
+    ra = math.tan(math.pi * 0.25 + lat * DEGRAD * 0.5)
+    ra = re * sf / ra ** sn
+    theta = lon * DEGRAD - olon
+    if theta > math.pi:
+        theta -= 2 * math.pi
+    if theta < -math.pi:
+        theta += 2 * math.pi
+    theta *= sn
+    nx = int(ra * math.sin(theta) + XO + 0.5)
+    ny = int(ro - ra * math.cos(theta) + YO + 0.5)
+    return nx, ny
+
+
+def _pcp_mm(raw) -> float:
+    """단기예보 PCP/강수량 문자열 → mm. '강수없음'/'-'→0, 'X.Xmm'→X.X, '1mm 미만'→0.5."""
+    if raw is None:
+        return 0.0
+    s = str(raw).strip()
+    if not s or s in ("강수없음", "적설없음", "-"):
+        return 0.0
+    if "미만" in s:
+        return 0.5
+    num = ""
+    for ch in s:
+        if ch.isdigit() or ch == ".":
+            num += ch
+        elif num:
+            break
+    try:
+        return float(num) if num else 0.0
+    except ValueError:
+        return 0.0
+
+
+class RealForecastClient(BaseForecastClient):
+    """기상청 단기예보(공공데이터포털 getVilageFcst) 실연동 클라이언트.
+
+    각 관측소 좌표를 격자로 변환해 예보를 받아, fcstDate(예보 대상일) 단위로
+    일 변수(tavg/tmin/tmax/rain/humidity)를 집계한 스냅샷 행으로 반환한다.
+    issued_at(발행시각)을 보존해 point-in-time 평가에서 미래 예보 누수를 막는다.
+    """
+
+    source = "kma_vilage"
+    BASE_URL = "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst"
+    USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+    )
+    # 발행시각(02·05·08·11·14·17·20·23시) 중 사용할 기본값
+    BASE_TIME = "0500"
+
+    def __init__(self, api_key: Optional[str] = None, base_date: Optional[date] = None):
+        self.api_key = api_key or getattr(settings, "DATA_GO_KR_API_KEY", "")
+        self.base_date = base_date or timezone.localdate()
+
+    def _fetch_station(self, station) -> list[dict]:
+        if station.latitude is None or station.longitude is None:
+            return []
+        nx, ny = _latlon_to_grid(float(station.latitude), float(station.longitude))
+        params = {
+            "serviceKey": self.api_key, "dataType": "JSON", "numOfRows": "1000",
+            "pageNo": "1", "base_date": self.base_date.strftime("%Y%m%d"),
+            "base_time": self.BASE_TIME, "nx": nx, "ny": ny,
+        }
+        url = f"{self.BASE_URL}?{urlencode(params)}"
+        req = Request(url, headers={"User-Agent": self.USER_AGENT})
+        try:
+            with urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (URLError, ValueError, TimeoutError, OSError):
+            return []
+        try:
+            if payload["response"]["header"].get("resultCode") not in ("00", 0):
+                return []
+            items = payload["response"]["body"]["items"]["item"]
+        except (KeyError, TypeError):
+            return []
+
+        # fcstDate 별로 카테고리 집계
+        by_day: dict[str, dict] = {}
+        for it in items:
+            d = it.get("fcstDate")
+            cat = it.get("category")
+            val = it.get("fcstValue")
+            if not d or cat is None:
+                continue
+            agg = by_day.setdefault(d, {"_tmp": [], "_reh": [], "_pcp": 0.0})
+            if cat == "TMP":
+                agg["_tmp"].append(_f(val))
+            elif cat == "TMN":
+                agg["tmin"] = _f(val)
+            elif cat == "TMX":
+                agg["tmax"] = _f(val)
+            elif cat == "REH":
+                agg["_reh"].append(_f(val))
+            elif cat == "PCP":
+                agg["_pcp"] += _pcp_mm(val)
+            elif cat == "POP":
+                v = _f(val)
+                if v is not None:
+                    agg["pop"] = max(agg.get("pop", 0), v)
+
+        issued_at = datetime.combine(
+            self.base_date,
+            datetime.min.time().replace(hour=int(self.BASE_TIME[:2])),
+        )
+        rows = []
+        for d, agg in sorted(by_day.items()):
+            tmps = [x for x in agg["_tmp"] if x is not None]
+            rehs = [x for x in agg["_reh"] if x is not None]
+            variables = {}
+            if tmps:
+                variables["tavg"] = round(sum(tmps) / len(tmps), 1)
+            if agg.get("tmin") is not None:
+                variables["tmin"] = agg["tmin"]
+            if agg.get("tmax") is not None:
+                variables["tmax"] = agg["tmax"]
+            if rehs:
+                variables["humidity"] = round(sum(rehs) / len(rehs), 1)
+            variables["rain"] = round(agg["_pcp"], 1)
+            if "pop" in agg:
+                variables["pop"] = agg["pop"]
+            rows.append({
+                "provider": self.source,
+                "issued_at": issued_at.isoformat(),
+                "valid_at": f"{d[:4]}-{d[4:6]}-{d[6:]}",
+                "station_id": station.station_id,
+                "variables": variables,
+                "raw_ref": f"kma:vilage:{station.station_id}:{self.base_date}:{self.BASE_TIME}",
+            })
+        return rows
+
+    def fetch(self) -> list[dict]:
+        if not self.api_key:
+            return []
+        out = []
+        for st in WeatherStation.objects.filter(is_active=True):
+            out.extend(self._fetch_station(st))
+        return out
+
+
+def get_forecast_client() -> BaseForecastClient:
+    """키가 있으면 실 단기예보 API, 없으면 fixture."""
+    if getattr(settings, "DATA_GO_KR_API_KEY", ""):
+        return RealForecastClient()
+    return FixtureForecastClient()
+
+
 @transaction.atomic
 def _upsert_forecast(row, source, collected_at, run, station_map):
     station = station_map.get(row.get("station_id")) if row.get("station_id") else None
