@@ -6191,46 +6191,74 @@ footer {
 
 .ranking-outlook {
   display: grid;
-  height: 145px;
   grid-template-columns: repeat(3, 1fr);
-  align-items: end;
   gap: 9px;
   margin-top: 20px;
-  padding: 16px 16px 0;
+  padding: 16px;
   border-radius: 17px;
   background: var(--surface-soft);
 }
 
-.ranking-outlook > div {
-  display: grid;
-  height: 100%;
-  align-items: end;
-  justify-items: center;
+.outlook-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
-.ranking-outlook span {
-  align-self: start;
+.outlook-col span {
   color: var(--text-faint);
   font-size: 8px;
 }
 
-.ranking-outlook small {
-  margin-bottom: 4px;
+.outlook-col small {
   color: var(--text-faint);
   font-size: 7px;
 }
 
-.ranking-outlook strong {
-  margin-bottom: 5px;
+.outlook-col strong {
   font-size: 13px;
 }
 
-.ranking-outlook i {
+.outlook-col.is-up strong { color: #C44536; }
+.outlook-col.is-down strong { color: #2563EB; }
+
+/* 중앙 기준선을 두고 상승은 위, 하락은 아래로 갈라지는 막대 */
+.outlook-track {
+  position: relative;
+  width: 100%;
+  height: 96px;
+  margin-top: 6px;
+}
+
+.outlook-track::before {
+  content: '';
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: 50%;
+  height: 1px;
+  background: var(--app-line);
+}
+
+.outlook-track i {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   width: 52%;
-  min-height: 22px;
-  max-height: 78px;
+  min-height: 6px;
+}
+
+.is-up .outlook-track i {
+  bottom: 50%;
   border-radius: 8px 8px 0 0;
   background: linear-gradient(180deg, #df8b5a, var(--primary));
+}
+
+.is-down .outlook-track i {
+  top: 50%;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(0deg, #6aa3e8, #2563EB);
 }
 
 .ranking-evidence,

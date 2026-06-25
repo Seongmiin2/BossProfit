@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api/client'
+import { fetchStoreAnalysis, postAnalysisFollowUp } from '@/api/endpoints'
 import AppIcon from '@/components/AppIcon.vue'
 import onionImage from '@/assets/produce/onion.webp'
 import cabbageImage from '@/assets/produce/napa-cabbage.webp'
@@ -147,6 +148,65 @@ function search() {
 function selectItem(item, index) {
   activeCode.value = item.code
   pulseIndex.value = index
+}
+
+/* ── 액션 버튼: 내 가게 영향 계산 / 119 대응 전략 ── */
+const actionModal = ref(null)      // { mode: 'impact' | 'advice', title }
+const actionLoading = ref(false)
+const actionError = ref('')
+const impactResult = ref(null)     // 매칭된 risk 항목 | { empty: true }
+const adviceAnswer = ref('')
+
+function closeActionModal() {
+  actionModal.value = null
+}
+
+function goIngredients() {
+  closeActionModal()
+  router.push('/ingredients')
+}
+
+async function openImpact() {
+  if (!activeItem.value) return
+  actionModal.value = { mode: 'impact', title: '내 가게 영향 계산' }
+  actionLoading.value = true
+  actionError.value = ''
+  impactResult.value = null
+  try {
+    const { data } = await fetchStoreAnalysis()
+    const risks = data?.market_risks?.items || []
+    const match = risks.find((risk) => risk.item?.code === activeItem.value.code)
+    impactResult.value = match || { empty: true }
+  } catch (requestError) {
+    actionError.value = requestError.response?.status === 409
+      ? '먼저 매장을 등록해주세요.'
+      : (requestError.response?.data?.detail || '영향을 계산하지 못했습니다.')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function openAdvice() {
+  if (!activeItem.value) return
+  const item = activeItem.value
+  actionModal.value = { mode: 'advice', title: '119 대응 전략' }
+  actionLoading.value = true
+  actionError.value = ''
+  adviceAnswer.value = ''
+  const question =
+    `${item.name} 가격이 ${formatPercent(item.change_rate)} 전망입니다. `
+    + `우리 가게에서 ${item.name}를 쓰는 메뉴의 대응 전략과 `
+    + `구매 시점(선구매·관망) 판단을 구체적으로 알려주세요.`
+  try {
+    const { data } = await postAnalysisFollowUp(question)
+    adviceAnswer.value = data.answer
+  } catch (requestError) {
+    actionError.value = requestError.response?.status === 409
+      ? '먼저 매장을 등록해주세요.'
+      : (requestError.response?.data?.detail || 'AI 답변을 가져오지 못했습니다.')
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 watch(() => route.params.type, loadRanking)
@@ -296,31 +356,28 @@ onMounted(loadRanking)
         </div>
 
         <div class="ranking-outlook">
-          <div v-for="outlook in activeItem.outlooks" :key="outlook.horizon_days">
+          <div
+            v-for="outlook in activeItem.outlooks"
+            :key="outlook.horizon_days"
+            class="outlook-col"
+            :class="outlook.change_rate >= 0 ? 'is-up' : 'is-down'"
+          >
             <span>{{ outlook.horizon_days }}일 전망</span>
             <strong>{{ formatPercent(outlook.change_rate) }}</strong>
             <small>{{ formatPrice(outlook.lower_price) }}~{{ formatPrice(outlook.upper_price) }}</small>
-            <i :style="{ height: `${30 + Math.min(Math.abs(outlook.change_rate), 12) * 4}px` }"></i>
+            <div class="outlook-track">
+              <i :style="{ height: `${6 + Math.min(Math.abs(outlook.change_rate), 12) * 3.4}px` }"></i>
+            </div>
           </div>
         </div>
-
-        <section class="ranking-evidence">
-          <span>WHY THIS RANK?</span>
-          <h3>이 순위가 나온 근거</h3>
-          <ul>
-            <li v-for="evidence in activeItem.evidence" :key="evidence">
-              <b>✓</b><span>{{ evidence }}</span>
-            </li>
-          </ul>
-        </section>
 
         <section class="ranking-action">
           <span>NEXT ACTION</span>
           <h3>현재 권장 판단</h3>
           <p>{{ activeItem.action }}</p>
           <div>
-            <button>내 가게 영향 계산</button>
-            <button class="secondary">119에 대응 전략 묻기</button>
+            <button @click="openImpact">내 가게 영향 계산</button>
+            <button class="secondary" @click="openAdvice">119에 대응 전략 묻기</button>
           </div>
         </section>
 
@@ -336,5 +393,122 @@ onMounted(loadRanking)
       <p>다른 품목명으로 검색해주세요.</p>
       <button @click="query = ''; search()">전체 순위 보기</button>
     </section>
+
+    <!-- 액션 모달: 내 가게 영향 계산 / 119 대응 전략 -->
+    <div v-if="actionModal" class="mra-overlay" @click.self="closeActionModal">
+      <div class="mra-modal">
+        <div class="mra-head">
+          <div>
+            <span class="mra-eyebrow">{{ activeItem?.name }}</span>
+            <h3>{{ actionModal.title }}</h3>
+          </div>
+          <button class="mra-close" @click="closeActionModal">✕</button>
+        </div>
+
+        <div v-if="actionLoading" class="mra-state">
+          <div class="spinner"></div>
+          <span>{{ actionModal.mode === 'advice' ? 'AI가 대응 전략을 작성 중입니다…' : '매장 데이터를 분석 중입니다…' }}</span>
+        </div>
+
+        <div v-else-if="actionError" class="mra-state">
+          <strong>{{ actionError }}</strong>
+          <button v-if="actionError.includes('매장')" @click="goIngredients">매장·재료 설정하러 가기 →</button>
+        </div>
+
+        <!-- 내 가게 영향 계산 -->
+        <template v-else-if="actionModal.mode === 'impact'">
+          <template v-if="impactResult && !impactResult.empty">
+            <div class="mra-summary">
+              <div>
+                <span>예상 변동률</span>
+                <strong :class="impactResult.headline_change_rate >= 0 ? 'mra-up' : 'mra-down'">
+                  {{ formatPercent(impactResult.headline_change_rate) }}
+                </strong>
+              </div>
+              <div v-if="impactResult.current_price">
+                <span>현재가</span>
+                <strong>{{ formatPrice(impactResult.current_price) }} / {{ impactResult.item.unit }}</strong>
+              </div>
+            </div>
+            <p class="mra-msg">{{ impactResult.impact_message }}</p>
+            <span class="mra-label">영향받는 내 메뉴</span>
+            <div class="mra-menus">
+              <button
+                v-for="menu in impactResult.affected_menus"
+                :key="menu.menu_id"
+                class="mra-chip"
+                @click="router.push(`/menus/${menu.menu_id}`)"
+              >{{ menu.name }} ›</button>
+            </div>
+          </template>
+          <div v-else class="mra-state">
+            <strong>{{ activeItem?.name }}를 쓰는 연결된 메뉴가 없습니다.</strong>
+            <p>재료를 메뉴에 연결하면 가격 변동의 영향을 계산해드려요.</p>
+            <button @click="goIngredients">재료 연결하기 →</button>
+          </div>
+        </template>
+
+        <!-- 119 대응 전략 -->
+        <div v-else class="mra-advice">
+          <span class="mra-advice-badge">BUSINESS 119</span>
+          <p>{{ adviceAnswer }}</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.mra-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, .45);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.mra-modal {
+  width: 100%; max-width: 460px; max-height: 84vh; overflow-y: auto;
+  background: #fff; border-radius: 16px; padding: 22px 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+}
+.mra-head { display: flex; align-items: flex-start; justify-content: space-between; }
+.mra-eyebrow { font-size: 12px; font-weight: 800; color: var(--primary); }
+.mra-head h3 { margin-top: 4px; font-size: 20px; font-weight: 900; color: var(--text); }
+.mra-close {
+  width: 30px; height: 30px; border: none; border-radius: 8px;
+  background: #f3f1ec; color: var(--text); font-size: 14px; cursor: pointer;
+}
+
+.mra-state {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 30px 8px; text-align: center; color: var(--text-soft);
+}
+.mra-state strong { font-size: 15px; color: var(--text); }
+.mra-state p { font-size: 13px; color: var(--text-soft); margin: 0; }
+.mra-state button {
+  margin-top: 6px; border: none; border-radius: 8px; padding: 10px 18px;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+
+.mra-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
+.mra-summary > div { padding: 12px 14px; border-radius: 12px; background: #faf8f5; }
+.mra-summary span { display: block; font-size: 11px; color: var(--text-faint); }
+.mra-summary strong { font-size: 18px; font-weight: 900; color: var(--text); }
+.mra-summary strong.mra-up { color: #C44536; }
+.mra-summary strong.mra-down { color: #2563EB; }
+
+.mra-msg { font-size: 13px; line-height: 1.65; color: var(--text-soft); margin: 0 0 14px; }
+.mra-label { display: block; font-size: 11px; font-weight: 800; color: var(--text-faint); margin-bottom: 8px; }
+.mra-menus { display: flex; flex-wrap: wrap; gap: 8px; }
+.mra-chip {
+  border: 1px solid var(--app-line); background: #fff; border-radius: 999px;
+  padding: 7px 14px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.mra-chip:hover { border-color: var(--primary); background: #fff7f2; }
+
+.mra-advice-badge {
+  display: inline-block; font-size: 11px; font-weight: 800;
+  color: var(--primary); background: #fff1ea; border-radius: 6px;
+  padding: 3px 9px; margin-bottom: 10px;
+}
+.mra-advice p { font-size: 14px; line-height: 1.75; color: var(--text); white-space: pre-wrap; margin: 0; }
+</style>
