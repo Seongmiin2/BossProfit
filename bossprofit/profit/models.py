@@ -114,7 +114,14 @@ class Ingredient(models.Model):
         blank=True,
         related_name="ingredients",
         verbose_name="연동 시장품목",
-        help_text="가격 예측 대상으로 연동된 시장품목(재료별 1:1)",
+        help_text="가격 예측 대상으로 연동된 시장품목(재료별 1:1). "
+                  "실 commodity(양파 등) 연결 시 KAMIS·기상 실데이터 예측을 사용한다.",
+    )
+    commodity_unit_factor = models.FloatField(
+        default=1.0,
+        verbose_name="시장품목 단가 환산계수",
+        help_text="시장품목 가격(예: 원/kg)을 재료 단위(예: 원/g)로 환산하는 계수. "
+                  "실 commodity 연결 시 사용(예: 원/kg→원/g = 0.001).",
     )
     memo = models.TextField(blank=True, verbose_name="메모")
 

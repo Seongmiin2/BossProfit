@@ -97,9 +97,17 @@ def api_forecast_ingredients(request):
         .order_by("category", "name")
     )
 
+    def _scaled(val, factor):
+        if val is None:
+            return None
+        return round(float(val) * factor, 3)
+
     out = []
     for ing in ingredients:
         cur = round(ing.unit_cost, 4)
+        # 실 commodity(KAMIS·기상 실데이터) 연결 여부 + 단위 환산계수
+        is_real = bool(ing.market_item_id and ing.market_item.source != "manual")
+        factor = ing.commodity_unit_factor if is_real else 1.0
         row = {
             "ingredient_id": ing.ingredient_id,
             "name": ing.name,
@@ -108,13 +116,14 @@ def api_forecast_ingredients(request):
             "supply_unit_cost": cur,           # 내가 구입한 공급단가(원/단위)
             "market_price": None,              # KAMIS 시세 상의 현재 단가
             "is_supplied": ing.is_supplied,
+            "is_real": is_real,                # 실데이터(KAMIS·기상) 예측 여부
             "market_code": ing.market_item.code if ing.market_item_id else None,
             "as_of": None,
             "points": [],
         }
         # 본사 발주 재료(고정가)는 시세 변동이 없어 예측에서 제외한다.
         if not ing.is_supplied and ing.market_item_id:
-            row["market_price"] = _latest_market_price(ing.market_item)
+            row["market_price"] = _scaled(_latest_market_price(ing.market_item), factor)
         run = None if ing.is_supplied else (_latest_run(ing.market_item) if ing.market_item_id else None)
         if run is not None:
             row["as_of"] = run.as_of.isoformat()
@@ -123,14 +132,15 @@ def api_forecast_ingredients(request):
             for p in forecast_response_all(run):
                 if p is None:
                     continue
-                median = float(p["median"])
+                median = _scaled(p["median"], factor)
                 row["points"].append({
                     "horizon_days": p["horizon_days"],
                     "target_date": p["target_date"],
-                    "median": p["median"],
-                    "lower_80": p["lower_80"],
-                    "upper_80": p["upper_80"],
+                    "median": median,
+                    "lower_80": _scaled(p["lower_80"], factor),
+                    "upper_80": _scaled(p["upper_80"], factor),
                     "confidence": p["confidence"],
+                    "weather_forecast_issued_at": p.get("weather_forecast_issued_at"),
                     "delta_rate": round((median - base) / base * 100, 1) if base else None,
                 })
         out.append(row)

@@ -83,6 +83,11 @@ class Command(BaseCommand):
                 self.stdout.write(f"  · {ing.name}: 본사 발주(고정가) — 예측 제외")
                 skipped += 1
                 continue
+            # 이미 실 commodity(KAMIS·기상 실데이터)에 연결된 재료는 합성으로 덮지 않는다.
+            if ing.market_item_id and ing.market_item.source != "manual":
+                self.stdout.write(f"  · {ing.name}: 실 commodity({ing.market_item.code}) 연결됨 — 합성 제외")
+                skipped += 1
+                continue
             anchor = ing.unit_cost
             if not anchor or anchor <= 0:
                 self.stdout.write(f"  - {ing.name}: 단가 0 — 건너뜀")

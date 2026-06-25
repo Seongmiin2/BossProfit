@@ -226,7 +226,10 @@ const chartOptions = {
                 cursor:'pointer', borderTop:'1px solid #f1f3f5',
                 background: store.selectedCode===row.market_code ? '#fff4e6' : 'transparent',
               }">
-              <td style="padding:9px 14px;font-weight:600;">{{ row.name }}</td>
+              <td style="padding:9px 14px;font-weight:600;">
+                {{ row.name }}
+                <span v-if="row.is_real" style="margin-left:6px;background:#1c7ed6;color:#fff;font-size:0.68rem;padding:1px 6px;border-radius:8px;vertical-align:middle;">실데이터</span>
+              </td>
               <td style="padding:9px 14px;color:#868e96;">{{ row.category || '-' }}</td>
               <td style="padding:9px 14px;text-align:right;">{{ row.supply_unit_cost }} <span style="color:#adb5bd;font-size:0.8rem;">원/{{ row.unit }}</span></td>
               <td style="padding:9px 14px;text-align:right;">
@@ -257,7 +260,8 @@ const chartOptions = {
 
       <p style="margin-top:14px;font-size:0.78rem;color:#adb5bd;">
         ▲ 가격 상승 예상(원가 부담↑) · ▼ 하락 예상 · 행을 클릭하면 해당 재료의 시계열 예측 차트를 봅니다.
-        실제 시세가 없는 가공재료는 현재 단가 기준 합성 시세로 추세를 추정합니다.
+        <span style="background:#1c7ed6;color:#fff;font-size:0.65rem;padding:0 5px;border-radius:6px;">실데이터</span>
+        는 KAMIS 실시세·기상청 기상을 반영한 예측, 나머지는 현재 단가 기준 합성 시세 추세입니다.
       </p>
     </template>
   </div>
