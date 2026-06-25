@@ -213,6 +213,7 @@ def build_weather_exposure(weather: pd.DataFrame, growth_doy: Optional[set] = No
     tmax = w.get("tmax")
     tmin = w.get("tmin")
     rain = w.get("rain")
+    soil = w.get("soil_moisture")  # 농업기상(농진청)에서만 제공
 
     # 일 단위 파생
     if tavg is not None:
@@ -238,6 +239,11 @@ def build_weather_exposure(weather: pd.DataFrame, growth_doy: Optional[set] = No
     if tavg is not None:
         normal = tavg.rolling(30, min_periods=10).mean()
         out["wx_tavg_anomaly"] = tavg - normal
+    # 토양수분(농업기상): 수준 + 평년 대비 편차(가뭄/과습 신호)
+    if soil is not None and soil.notna().any():
+        out["wx_soil_moisture"] = soil.ffill()
+        soil_normal = soil.rolling(30, min_periods=5).mean()
+        out["wx_soil_anomaly"] = soil - soil_normal
     # 연속 무강수일수
     if rain is not None:
         dryb = (rain < DRY_RAIN)

@@ -143,6 +143,103 @@ def get_asos_client() -> BaseAsosClient:
     return FixtureAsosClient()
 
 
+class RealAgriWeatherClient(BaseAsosClient):
+    """농촌진흥청 농업기상 상세 관측(getWeatherTimeList4) 실연동.
+
+    시간자료를 일 단위로 집계해 ASOS와 동일한 변수명으로 정규화한다.
+    ASOS에 없는 soil_moisture(토양수분)를 제공하는 것이 핵심 가치다.
+    """
+
+    source = "aws_agri"
+    BASE_URL = "https://apis.data.go.kr/1390802/AgriWeather/WeatherObsrInfo/V4/InsttWeather/getWeatherTimeList4"
+    USER_AGENT = RealAsosClient.USER_AGENT
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or getattr(settings, "DATA_GO_KR_API_KEY", "")
+
+    def _fetch_day(self, spot_code: str, day: date) -> Optional[dict]:
+        params = {
+            "serviceKey": self.api_key, "Page_No": "1", "Page_Size": "30",
+            "obsr_Spot_Cd": spot_code, "date_Time": day.isoformat(),
+        }
+        url = f"{self.BASE_URL}?{urlencode(params)}"
+        req = Request(url, headers={"User-Agent": self.USER_AGENT})
+        try:
+            with urlopen(req, timeout=15) as resp:
+                raw = resp.read().decode("utf-8")
+        except (URLError, ValueError, TimeoutError, OSError):
+            return None
+        import re
+        if "<result_Code>200" not in raw:
+            return None
+        items = re.findall(r"<item>(.*?)</item>", raw, re.S)
+        if not items:
+            return None
+
+        def g(block, tag):
+            m = re.search(rf"<{tag}>([^<]*)</{tag}>", block)
+            return _f(m.group(1)) if m else None
+
+        tmps, hds, sms = [], [], []
+        rain_sum, sun_sum = 0.0, 0.0
+        for b in items:
+            t = g(b, "tmprt_150")
+            if t is not None:
+                tmps.append(t)
+            h = g(b, "hd_150")
+            if h is not None:
+                hds.append(h)
+            sm = g(b, "soil_Mitr_30")
+            if sm is not None:
+                sms.append(sm)
+            r = g(b, "rn")
+            if r is not None:
+                rain_sum += r
+            s = g(b, "srqty")
+            if s is not None:
+                sun_sum += s
+
+        variables = {}
+        if tmps:
+            variables["tavg"] = round(sum(tmps) / len(tmps), 2)
+            variables["tmin"] = round(min(tmps), 2)
+            variables["tmax"] = round(max(tmps), 2)
+        if hds:
+            variables["humidity"] = round(sum(hds) / len(hds), 2)
+        if sms:
+            variables["soil_moisture"] = round(sum(sms) / len(sms), 2)
+        variables["rain"] = round(rain_sum, 2)
+        if sun_sum:
+            variables["sunshine"] = round(sun_sum, 2)
+        if not variables:
+            return None
+        return {
+            "observed_date": day.isoformat(),
+            "variables": variables,
+            "raw_ref": f"agri:{spot_code}:{day.isoformat()}",
+        }
+
+    def fetch(self, station, start: date, end: date) -> list[dict]:
+        if not self.api_key:
+            return []
+        spot = station.station_id
+        out = []
+        d = start
+        while d <= end:
+            row = self._fetch_day(spot, d)
+            if row:
+                out.append(row)
+            d += timedelta(days=1)
+        return out
+
+
+def get_agri_client() -> Optional[BaseAsosClient]:
+    """농업기상 클라이언트(키 있을 때만)."""
+    if getattr(settings, "DATA_GO_KR_API_KEY", ""):
+        return RealAgriWeatherClient()
+    return None
+
+
 @transaction.atomic
 def _upsert_obs(station, row, source, collected_at, run):
     natural = dict(
