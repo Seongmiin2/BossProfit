@@ -52,9 +52,9 @@ for (const viewport of [
       await page.goto('/')
       await page.waitForLoadState('networkidle')
       await expect(page.getByRole('heading', {
-        name: /식재료 가격이 오르기 전에/,
+        name: /오르기 전에/,
       })).toBeVisible()
-      await expect(page.getByText('실제 시장 데이터')).toBeVisible()
+      await expect(page.getByText('시장 가격 예측', { exact: true })).toBeVisible()
       await assertNoHorizontalOverflow(page)
       await page.screenshot({
         path: path.join(artifactDir, `landing-${viewport.name}.png`),
@@ -65,7 +65,7 @@ for (const viewport of [
     test(`authenticated pages ${viewport.name}`, async ({ page }) => {
       await authenticate(page)
       const pages = [
-        ['/app', /오늘 먼저 확인할 재료와 메뉴/, 'dashboard'],
+        ['/app', /내 가게 재료/, 'dashboard'],
         ['/menus', /어떤 메뉴가 가장 많이 팔리고 있을까요/, 'menus'],
         ['/history', /AI 매장 분석 리포트/, 'report'],
       ]

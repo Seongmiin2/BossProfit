@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api/client'
 import AppIcon from '@/components/AppIcon.vue'
@@ -13,7 +13,6 @@ const route = useRoute()
 const router = useRouter()
 
 const rankingTypes = [
-  { key: 'volume', label: '거래량', title: '거래량 TOP 5', description: '도매시장 거래량·반입량 기준' },
   { key: 'today', label: '오늘 변동', title: '오늘 가격 변동 TOP 5', description: '직전 유효 거래일 대비 등락률 기준' },
   { key: 'tomorrow', label: '내일 전망', title: '내일 예상 변동 TOP 5', description: '내일 중앙 예측값의 예상 등락률 기준' },
 ]
@@ -36,7 +35,6 @@ const loading = ref(false)
 const error = ref('')
 const activeCode = ref('')
 const pulseIndex = ref(0)
-let rotationTimer = null
 
 const activeType = computed(() =>
   rankingTypes.some((item) => item.key === route.params.type) ? route.params.type : 'tomorrow'
@@ -45,18 +43,47 @@ const currentType = computed(() => rankingTypes.find((item) => item.key === acti
 const activeItem = computed(() =>
   items.value.find((item) => item.code === activeCode.value) || items.value[0] || null
 )
-const chartPoints = computed(() => {
+const priceChart = computed(() => {
   const history = activeItem.value?.history || []
-  if (!history.length) return ''
-  const values = history.map((item) => item.price)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+  const forecast = activeItem.value?.forecast_series || []
+  if (!history.length) return null
+
+  const allValues = [
+    ...history.map((h) => h.price),
+    ...forecast.flatMap((f) => [f.lower, f.upper, f.median]),
+  ]
+  const min = Math.min(...allValues)
+  const max = Math.max(...allValues)
   const range = max - min || 1
-  return history.map((item, index) => {
-    const x = (index / Math.max(history.length - 1, 1)) * 100
-    const y = 45 - ((item.price - min) / range) * 38
-    return `${x},${y}`
-  }).join(' ')
+
+  const total = history.length + forecast.length
+  const xStep = 100 / Math.max(total - 1, 1)
+  const yOf = (v) => +(46 - ((v - min) / range) * 42).toFixed(2)
+  const xOf = (i) => +(i * xStep).toFixed(2)
+
+  const histPts = history.map((h, i) => `${xOf(i)},${yOf(h.price)}`)
+  const anchorX = xOf(history.length - 1)
+  const anchorY = yOf(history[history.length - 1].price)
+
+  const fcLine = forecast.map((f, i) => `${xOf(history.length + i)},${yOf(f.median)}`)
+  const upper = forecast.map((f, i) => `${xOf(history.length + i)},${yOf(f.upper)}`)
+  const lower = forecast.map((f, i) => `${xOf(history.length + i)},${yOf(f.lower)}`)
+
+  return {
+    historyLine: histPts.join(' '),
+    forecastLine: forecast.length
+      ? [`${anchorX},${anchorY}`, ...fcLine].join(' ')
+      : '',
+    band: forecast.length
+      ? [`${anchorX},${anchorY}`, ...upper, ...lower.reverse(), `${anchorX},${anchorY}`].join(' ')
+      : '',
+    dividerX: anchorX,
+    hasForecast: forecast.length > 0,
+    max,
+    min,
+    current: history[history.length - 1].price,
+    forecastEnd: forecast.length ? forecast[forecast.length - 1] : null,
+  }
 })
 
 function formatPercent(value) {
@@ -122,32 +149,13 @@ function selectItem(item, index) {
   pulseIndex.value = index
 }
 
-function startRotation() {
-  stopRotation()
-  rotationTimer = window.setInterval(() => {
-    if (!items.value.length) return
-    pulseIndex.value = (pulseIndex.value + 1) % items.value.length
-    activeCode.value = items.value[pulseIndex.value].code
-  }, 2800)
-}
-
-function stopRotation() {
-  if (rotationTimer) window.clearInterval(rotationTimer)
-  rotationTimer = null
-}
-
 watch(() => route.params.type, loadRanking)
 watch(() => route.query.q, () => {
   query.value = String(route.query.q || '')
   loadRanking()
 })
-watch(items, startRotation)
 
-onMounted(async () => {
-  await loadRanking()
-  startRotation()
-})
-onUnmounted(stopRotation)
+onMounted(loadRanking)
 </script>
 
 <template>
@@ -216,20 +224,20 @@ onUnmounted(stopRotation)
     </section>
 
     <div v-else-if="activeItem" class="ranking-layout">
-      <section class="ranking-list-panel" @mouseenter="stopRotation" @mouseleave="startRotation">
+      <section class="ranking-list-panel">
         <div class="ranking-panel-head">
           <div>
             <span>TOP 5</span>
-            <h2>실시간 주목 품목</h2>
+            <h2>주목 품목</h2>
           </div>
-          <small>순위가 차례로 강조됩니다</small>
+          <small>품목을 누르면 상세가 바뀝니다</small>
         </div>
 
         <button
           v-for="(item, index) in items"
           :key="item.code"
           class="ranking-row"
-          :class="{ active: activeItem.code === item.code, pulsing: pulseIndex === index }"
+          :class="{ active: activeItem.code === item.code }"
           @click="selectItem(item, index)"
         >
           <b>{{ String(item.rank).padStart(2, '0') }}</b>
@@ -261,14 +269,30 @@ onUnmounted(stopRotation)
 
         <p class="ranking-summary">{{ activeItem.summary }}</p>
 
-        <div class="ranking-price-chart">
+        <div class="ranking-price-chart" v-if="priceChart">
           <div>
-            <span>최근 14일 가격 흐름</span>
+            <span>최근 14일 가격 + 7일 예측</span>
             <strong>{{ formatPercent(activeItem.change_rate) }}</strong>
           </div>
-          <svg viewBox="0 0 100 50" preserveAspectRatio="none" aria-label="최근 가격 흐름">
-            <polyline :points="chartPoints" fill="none" stroke="currentColor" stroke-width="2.3" vector-effect="non-scaling-stroke" />
-          </svg>
+          <div class="chart-canvas">
+            <svg viewBox="0 0 100 50" preserveAspectRatio="none" aria-label="최근 가격 흐름과 7일 예측">
+              <polygon v-if="priceChart.hasForecast" :points="priceChart.band" class="chart-band" />
+              <line v-if="priceChart.hasForecast" :x1="priceChart.dividerX" y1="2" :x2="priceChart.dividerX" y2="48" class="chart-divider" vector-effect="non-scaling-stroke" />
+              <polyline :points="priceChart.historyLine" fill="none" stroke="currentColor" stroke-width="2.3" vector-effect="non-scaling-stroke" />
+              <polyline v-if="priceChart.hasForecast" :points="priceChart.forecastLine" fill="none" class="chart-forecast" stroke-width="2.3" stroke-dasharray="3 2.5" vector-effect="non-scaling-stroke" />
+            </svg>
+            <span class="axis-label axis-max">{{ formatPrice(priceChart.max) }}</span>
+            <span class="axis-label axis-min">{{ formatPrice(priceChart.min) }}</span>
+          </div>
+          <div class="chart-prices">
+            <span>현재가 <b>{{ formatPrice(priceChart.current) }}</b></span>
+            <span v-if="priceChart.forecastEnd">7일 후 예측 <b>{{ formatPrice(priceChart.forecastEnd.median) }}</b> ({{ formatPrice(priceChart.forecastEnd.lower) }}~{{ formatPrice(priceChart.forecastEnd.upper) }})</span>
+          </div>
+          <div class="chart-legend">
+            <span><i class="lg-actual"></i>실제 가격</span>
+            <span><i class="lg-forecast"></i>7일 예측</span>
+            <span><i class="lg-band"></i>예측 구간</span>
+          </div>
         </div>
 
         <div class="ranking-outlook">

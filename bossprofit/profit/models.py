@@ -45,6 +45,11 @@ class Ingredient(models.Model):
     )
     purchase_price = models.PositiveIntegerField(verbose_name="구매 가격(원)")
     unit = models.CharField(max_length=20, default="g", verbose_name="단위")
+    is_hq_supplied = models.BooleanField(
+        default=False,
+        verbose_name="본사 납품",
+        help_text="본사에서 납품가가 정해져 공급되는 재료(시장가격 변동 영향이 거의 없음)",
+    )
     memo = models.TextField(blank=True, verbose_name="메모")
 
     class Meta:

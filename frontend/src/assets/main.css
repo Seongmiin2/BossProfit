@@ -1,5 +1,5 @@
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Serif+KR:wght@400;700;900&display=swap');
+/* Pretendard — 현대적 한국어 가변 폰트 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
 
 /* Reset & Base */
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,7 +20,7 @@
 }
 
 body {
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--cream);
   color: var(--ink);
   min-height: 100vh;
@@ -28,7 +28,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.font-serif { font-family: 'Noto Serif KR', serif; }
+.font-serif { font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 
 a { color: inherit; text-decoration: none; }
 a:hover { color: var(--coral); }
@@ -56,7 +56,7 @@ button { font-family: inherit; cursor: pointer; border: none; }
 }
 
 .brand {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-weight: 900;
   font-size: 24px;
   color: var(--coral);
@@ -102,7 +102,7 @@ main.container {
 }
 
 .banner h1 {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 30px;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -149,7 +149,7 @@ main.container {
 }
 
 .kpi-value {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 26px;
   font-weight: 900;
   margin-top: 4px;
@@ -169,7 +169,7 @@ main.container {
 }
 
 .sect-head h2 {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 24px;
   font-weight: 900;
   margin-bottom: 4px;
@@ -205,7 +205,7 @@ main.container {
 .insight-comment { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
 
 .insight-value {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 20px;
   font-weight: 900;
   color: var(--coral);
@@ -366,7 +366,7 @@ main.container {
 }
 
 .detail-header h1 {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 40px;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -402,7 +402,7 @@ main.container {
 }
 
 .margin-card .val {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 30px;
   font-weight: 900;
 }
@@ -442,7 +442,7 @@ main.container {
 }
 
 .weighted-banner .big {
-  font-family: 'Noto Serif KR', serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 36px;
   font-weight: 900;
 }
@@ -799,6 +799,58 @@ footer {
 .bp-menu-stats article { min-height: 104px; padding: 16px; }
 .bp-menu-stats strong { font-size: 20px; }
 
+.bp-period-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--app-line, #ece9e3);
+  border-radius: 16px;
+  background: #fff;
+}
+.bp-period-presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.bp-period-presets button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--app-line, #ece9e3);
+  background: #fff;
+  color: var(--text-soft, #737a77);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.bp-period-presets button.active {
+  background: var(--navy, #2c302e);
+  border-color: transparent;
+  color: #fff;
+}
+.bp-period-range { display: inline-flex; align-items: center; gap: 8px; }
+.bp-period-range input[type="date"] {
+  padding: 8px 10px;
+  border: 1px solid var(--app-line, #ece9e3);
+  border-radius: 10px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text, #2c302e);
+}
+.bp-period-range span { color: var(--text-faint, #a8aca8); }
+.bp-period-apply {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary, #c95626);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .bp-period-bar { flex-direction: column; align-items: stretch; }
+}
+
 .bp-decision-section,
 .bp-analysis-panel,
 .bp-report-section,
@@ -841,6 +893,67 @@ footer {
 .bp-action-today a { color: #c55628; font-weight: 900; }
 .bp-data-rule { margin: 18px 0; color: #777e7b; font-size: 13px; text-align: center; }
 
+.bp-radar-header { min-height: 230px; align-items: flex-end; padding: 34px 0 28px; }
+.bp-radar-header h1 { max-width: 720px; font-size: clamp(46px, 5.4vw, 72px); }
+.bp-radar-header p { max-width: 650px; margin-top: 14px; line-height: 1.7; }
+.bp-radar-header-meta { display: grid; min-width: 240px; gap: 3px; padding: 18px; border-left: 3px solid #d96532; background: rgba(255,255,255,.7); }
+.bp-radar-header-meta span { color: #777e7b; font-size: 12px; }
+.bp-radar-header-meta strong { font-size: 20px; }
+.bp-radar-header-meta a { margin-top: 8px; color: #c95626; font-size: 13px; font-weight: 900; }
+
+.bp-store-risk-board { overflow: hidden; margin-bottom: 18px; padding: 28px; border-radius: 8px; background: #252b2a; color: #fff; }
+.bp-store-risk-board > header, .bp-ranking-section > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.bp-store-risk-board > header span, .bp-ranking-section > header span, .bp-market-reference span { color: #ee8e5c; font-size: 12px; font-weight: 900; letter-spacing: .08em; }
+.bp-store-risk-board > header h2 { margin: 3px 0; color: #fff; font-size: 32px; }
+.bp-store-risk-board > header p { margin: 0; color: rgba(255,255,255,.52); }
+.bp-store-risk-board > header > strong { color: #ff9b65; font-size: 18px; }
+.bp-store-risk-list { display: grid; gap: 8px; margin-top: 22px; }
+.bp-store-risk-list > button { display: grid; grid-template-columns: 42px 58px minmax(190px, 1fr) minmax(350px, .9fr) 22px; align-items: center; gap: 14px; min-height: 88px; padding: 12px 16px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: rgba(255,255,255,.055); color: #fff; text-align: left; }
+.bp-store-risk-list > button:hover { border-color: rgba(238,142,92,.6); background: rgba(217,101,50,.14); }
+.bp-store-risk-list > button > b { color: #ee9a6c; }
+.bp-store-risk-list img, .bp-risk-placeholder { width: 58px; height: 58px; border-radius: 4px; object-fit: cover; }
+.bp-risk-placeholder { display: grid; place-items: center; background: rgba(255,255,255,.1); font-weight: 900; }
+.bp-store-risk-list small { display: block; color: rgba(255,255,255,.5); }
+.bp-store-risk-list strong { display: block; font-size: 19px; }
+.bp-store-risk-list strong em { margin-left: 6px; color: #ff9b65; font-style: normal; }
+.bp-store-risk-list p { margin: 2px 0 0; color: rgba(255,255,255,.58); font-size: 13px; }
+.bp-store-risk-list dl { display: grid; grid-template-columns: .7fr 1.4fr .8fr; gap: 1px; margin: 0; background: rgba(255,255,255,.1); }
+.bp-store-risk-list dl div { padding: 8px 10px; background: #303735; }
+.bp-store-risk-list dt { color: rgba(255,255,255,.45); font-size: 10px; }
+.bp-store-risk-list dd { margin: 2px 0 0; font-size: 12px; font-weight: 800; }
+.bp-store-risk-list > button > i { color: rgba(255,255,255,.45); font-style: normal; font-size: 20px; }
+
+.bp-store-risk-empty { display: grid; grid-template-columns: 130px 1fr auto; align-items: center; gap: 26px; margin-top: 22px; padding: 26px; border: 1px solid rgba(255,255,255,.1); border-radius: 6px; background: rgba(255,255,255,.045); }
+.bp-store-risk-empty > div:first-child { padding-right: 26px; border-right: 1px solid rgba(255,255,255,.12); }
+.bp-store-risk-empty > div:first-child span { display: block; color: #ff9b65; font-size: 64px; font-weight: 900; line-height: 1; }
+.bp-store-risk-empty small { color: rgba(255,255,255,.5); }
+.bp-store-risk-empty strong { font-size: 21px; }
+.bp-store-risk-empty p { max-width: 650px; margin: 6px 0 0; color: rgba(255,255,255,.56); }
+.bp-store-risk-empty button { min-height: 48px; padding: 0 18px; border: 0; border-radius: 6px; background: #d96532; color: #fff; font-weight: 900; }
+
+.bp-ranking-section { margin-bottom: 18px; padding: 24px; border: 1px solid #dedfd9; border-radius: 8px; background: #fff; }
+.bp-ranking-section > header h2 { margin: 3px 0 0; font-size: 28px; }
+.bp-ranking-section > header p { color: #777e7b; font-size: 13px; }
+.bp-radar-next-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.bp-ranking-section.compact { min-height: 360px; }
+.bp-ranked-action-list { display: grid; gap: 7px; margin-top: 18px; }
+.bp-ranked-action-list button { display: grid; grid-template-columns: 38px 1fr auto; align-items: center; gap: 12px; min-height: 54px; padding: 10px 12px; border: 1px solid #e1e2dd; border-radius: 5px; background: #fafaf7; text-align: left; }
+.bp-ranked-action-list button:hover { border-color: #d96532; background: #fff7f2; }
+.bp-ranked-action-list b { color: #d96532; font-size: 12px; }
+.bp-ranked-action-list span strong, .bp-ranked-action-list span small { display: block; }
+.bp-ranked-action-list span strong { font-size: 16px; }
+.bp-ranked-action-list span small { color: #777e7b; font-size: 12px; }
+.bp-ranked-action-list i { color: #c95626; font-style: normal; font-size: 12px; font-weight: 900; }
+.bp-radar-empty-copy { display: grid; min-height: 230px; place-content: center; padding: 30px; text-align: center; }
+.bp-radar-empty-copy strong { font-size: 20px; }
+.bp-radar-empty-copy p { max-width: 420px; color: #737a77; }
+
+.bp-market-reference { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 28px; padding: 24px; border-radius: 8px; background: #f1eee8; }
+.bp-market-reference strong { display: block; margin-top: 4px; font-size: 19px; }
+.bp-market-reference p { margin: 4px 0 0; color: #6f7673; }
+.bp-market-reference nav { display: flex; gap: 6px; }
+.bp-market-reference a { padding: 10px 12px; border: 1px solid #d8d3ca; border-radius: 5px; background: #fff; color: #303836; font-size: 12px; font-weight: 800; }
+
 .bp-analysis-panel > header { align-items: flex-end; margin-bottom: 20px; }
 .bp-analysis-panel header span { color: #d96532; font-size: 12px; font-weight: 900; }
 .bp-horizontal-bars { display: grid; gap: 9px; }
@@ -872,18 +985,22 @@ footer {
 .bp-menu-browser input { width: min(260px, 100%); min-height: 42px; padding: 0 12px; border: 1px solid #d9dbd5; border-radius: 6px; font-size: 15px; }
 .bp-tab-row button { min-height: 40px; padding: 0 14px; border: 1px solid #d9dbd5; border-radius: 6px; background: #fff; font-weight: 800; }
 .bp-tab-row button.active { border-color: #d96532; background: #fff2e9; color: #c95626; }
-.bp-photo-menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
-.bp-photo-menu-grid > button { overflow: hidden; padding: 0; border: 1px solid #dedfd9; border-radius: 8px; background: #fff; text-align: left; }
-.bp-photo-menu-grid > button > img, .bp-photo-placeholder { width: 100%; height: 210px; object-fit: cover; }
-.bp-menu-card-body { padding: 18px; }
+.bp-photo-menu-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; align-items: stretch; }
+.bp-photo-menu-grid > button { display: flex; flex-direction: column; overflow: hidden; padding: 0; border: 1px solid #dedfd9; border-radius: 8px; background: #fff; text-align: left; }
+.bp-photo-menu-grid > button > img, .bp-photo-placeholder { width: 100%; height: 200px; object-fit: cover; flex-shrink: 0; display: block; }
+.bp-menu-card-body { display: flex; flex-direction: column; flex: 1; padding: 18px; }
 .bp-menu-card-body > span { color: #d96532; font-size: 12px; font-weight: 900; }
 .bp-menu-card-body h3 { margin: 6px 0 14px; font-size: 24px; }
 .bp-menu-card-body dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bp-menu-card-body dl div { padding: 10px; background: #f6f6f1; }
 .bp-menu-card-body dt { color: #777e7b; font-size: 12px; }
 .bp-menu-card-body dd { margin: 4px 0 0; font-weight: 800; }
-.bp-menu-card-body p { min-height: 42px; color: #737a77; font-size: 13px; }
-.bp-menu-card-body > b { color: #c95626; }
+.bp-menu-card-body p { margin: 12px 0 0; color: #737a77; font-size: 13px; }
+.bp-menu-card-body > b { margin-top: auto; padding-top: 14px; color: #c95626; }
+.bp-profit-row { margin-top: 12px; }
+.bp-profit-row div { background: #fbf3ee; }
+.bp-profit-row dd { color: #c95626; }
+.bp-profit-note { min-height: auto !important; font-size: 12px !important; color: #9aa09d !important; }
 .bp-menu-detail-panel { display: grid; grid-template-columns: 300px 1fr; gap: 28px; }
 .bp-detail-visual img, .bp-detail-visual > span { width: 100%; height: 300px; object-fit: cover; border-radius: 6px; }
 .bp-detail-visual > span { display: grid; place-items: center; background: #ecece5; font-size: 60px; font-weight: 900; }
@@ -955,6 +1072,10 @@ footer {
   .bp-menu-stats { grid-template-columns: repeat(3, 1fr); }
   .bp-leader-grid { grid-template-columns: repeat(3, 1fr); }
   .bp-photo-menu-grid { grid-template-columns: 1fr 1fr; }
+  .bp-store-risk-list > button { grid-template-columns: 36px 52px 1fr 22px; }
+  .bp-store-risk-list dl { grid-column: 3; margin-top: 8px; }
+  .bp-radar-next-grid { grid-template-columns: 1fr; gap: 0; }
+  .bp-market-reference { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {
@@ -994,6 +1115,24 @@ footer {
   .bp-two-column { grid-template-columns: 1fr; gap: 0; }
   .bp-action-today { grid-template-columns: 1fr; }
   .bp-action-today > p { display: block; margin: 0; color: #666e6b; }
+  .bp-radar-header { min-height: 0; padding: 22px 4px; }
+  .bp-radar-header h1 { font-size: 39px; }
+  .bp-radar-header-meta { width: 100%; }
+  .bp-store-risk-board { padding: 20px 16px; }
+  .bp-store-risk-board > header, .bp-ranking-section > header { align-items: flex-start; flex-direction: column; }
+  .bp-store-risk-board > header h2, .bp-ranking-section > header h2 { font-size: 25px; }
+  .bp-store-risk-empty { grid-template-columns: 1fr; gap: 18px; padding: 20px; }
+  .bp-store-risk-empty > div:first-child { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.12); }
+  .bp-store-risk-empty button { width: 100%; }
+  .bp-store-risk-list > button { grid-template-columns: 30px 48px 1fr 16px; gap: 9px; padding: 11px 8px; }
+  .bp-store-risk-list img, .bp-risk-placeholder { width: 48px; height: 48px; }
+  .bp-store-risk-list strong { font-size: 16px; }
+  .bp-store-risk-list dl { grid-column: 1 / -1; }
+  .bp-store-risk-list dl div:nth-child(2) { display: none; }
+  .bp-ranking-section { padding: 18px 14px; }
+  .bp-ranking-section.compact { min-height: auto; }
+  .bp-market-reference { padding: 20px 16px; }
+  .bp-market-reference nav { align-items: stretch; flex-direction: column; }
   .bp-horizontal-bars button { grid-template-columns: 22px 92px 1fr 58px; gap: 7px; }
   .bp-horizontal-bars strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bp-month-columns { gap: 5px; }
@@ -1102,7 +1241,7 @@ textarea:focus-visible {
   align-items: center;
   gap: 10px;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .brand:hover {
@@ -1406,7 +1545,7 @@ textarea:focus-visible {
 .landing-market-board {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(220px, 0.55fr) minmax(0, 1.45fr);
+  grid-template-columns: 250px minmax(180px, 0.55fr) minmax(0, 1.45fr);
   align-items: center;
   gap: 28px;
   margin-top: 74px;
@@ -1420,9 +1559,82 @@ textarea:focus-visible {
   color: white;
 }
 
+.market-board-persona-scene {
+  position: relative;
+  min-width: 0;
+  height: 270px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 105%, rgba(199,101,53,0.32), transparent 55%),
+    linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025));
+}
+
+.persona-scene-orbit {
+  position: absolute;
+  top: 32px;
+  left: 50%;
+  width: 175px;
+  height: 175px;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 24px rgba(255,255,255,0.025),
+    0 0 0 48px rgba(199,101,53,0.035);
+  transform: translateX(-50%);
+}
+
+.market-board-persona {
+  position: absolute;
+  bottom: -44px;
+  width: 168px;
+  max-width: none;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 16px 22px rgba(0,0,0,0.2));
+  pointer-events: none;
+}
+
+.market-board-persona.female {
+  left: -23px;
+  z-index: 2;
+}
+
+.market-board-persona.male {
+  right: -25px;
+  z-index: 1;
+}
+
+.market-board-persona-scene > p {
+  position: absolute;
+  right: 14px;
+  bottom: 13px;
+  left: 14px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  background: rgba(22,24,24,0.7);
+  backdrop-filter: blur(12px);
+}
+
+.market-board-persona-scene strong {
+  font-size: 10px;
+}
+
+.market-board-persona-scene p span {
+  color: rgba(255,255,255,0.48);
+  font-size: 8px;
+}
+
 .landing-board-head h2 {
   margin-top: 7px;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 29px;
   line-height: 1.3;
   font-weight: 900;
@@ -1539,7 +1751,7 @@ textarea:focus-visible {
   max-width: 690px;
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(40px, 4.8vw, 60px);
   line-height: 1.17;
   font-weight: 900;
@@ -1824,7 +2036,7 @@ textarea:focus-visible {
 .landing-data-principle h2 {
   margin: 14px 0 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 27px;
   line-height: 1.35;
   font-weight: 900;
@@ -1952,7 +2164,7 @@ textarea:focus-visible {
 .auth-brand-copy h1 {
   margin: 0;
   color: white;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(34px, 4vw, 52px);
   line-height: 1.18;
   font-weight: 900;
@@ -2028,7 +2240,7 @@ textarea:focus-visible {
 .onboarding-card-head h2 {
   margin: 6px 0 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 28px;
   line-height: 1.28;
   font-weight: 900;
@@ -2247,7 +2459,7 @@ textarea:focus-visible {
 .auth-complete h2,
 .onboarding-next-ready h2 {
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 25px;
   font-weight: 900;
 }
@@ -2348,7 +2560,7 @@ textarea:focus-visible {
 .onboarding-guide h1 {
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(30px, 4vw, 43px);
   line-height: 1.22;
   font-weight: 900;
@@ -2759,12 +2971,34 @@ footer {
   letter-spacing: 0.08em;
 }
 
+.eyebrow-pill {
+  display: inline-block;
+  align-self: flex-start;
+  width: fit-content;
+  margin-bottom: 14px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--primary-soft, #fbe7dd);
+  color: var(--primary, #c95626);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.welcome-row h1 .hl {
+  background: linear-gradient(95deg, #c95626 0%, #e89150 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .welcome-row h1 {
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
-  font-size: clamp(26px, 4vw, 38px);
-  line-height: 1.26;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: clamp(40px, 5.6vw, 64px);
+  font-weight: 900;
+  line-height: 1.14;
   letter-spacing: -0.045em;
 }
 
@@ -2885,7 +3119,7 @@ footer {
 .health-card h2 {
   margin: 15px 0 7px;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(24px, 4vw, 34px);
   font-weight: 900;
   letter-spacing: -0.04em;
@@ -3096,7 +3330,7 @@ footer {
 .action-copy h2 {
   margin: 3px 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 17px;
   font-weight: 900;
   letter-spacing: -0.025em;
@@ -3134,7 +3368,7 @@ footer {
 .section-title-row h2 {
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 22px;
   font-weight: 900;
   letter-spacing: -0.035em;
@@ -3145,6 +3379,112 @@ footer {
   font-size: 12px;
   font-weight: 800;
 }
+
+.section-caption {
+  margin: -8px 0 14px;
+  color: var(--text-soft, #737a77);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.section-caption strong {
+  color: var(--text, #2c302e);
+  font-weight: 800;
+}
+
+.trend-caption {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  margin: -6px 2px 10px;
+}
+
+.trend-caption .ah-label {
+  color: var(--text-soft, #8a8f8b);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.trend-caption .ah-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-soft, #8a8f8b);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.trend-caption .ah-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.trend-caption .ah-legend i.up { background: #2f9e6f; }
+.trend-caption .ah-legend i.down { background: #d8593f; margin-left: 5px; }
+
+.attention-head {
+  display: grid;
+  grid-template-columns: 43px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  background: linear-gradient(180deg, #faf8f4, #fff);
+  border-bottom: 1px solid var(--app-line, #eceae4);
+}
+
+.attention-head .ah-label {
+  color: var(--text-soft, #8a8f8b);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.attention-head .ah-title {
+  color: var(--text, #2c302e);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+.attention-head .ah-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+
+.attention-head .ah-link {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.attention-head .ah-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-soft, #8a8f8b);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.attention-head .ah-legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.attention-head .ah-legend i.up { background: #2f9e6f; }
+.attention-head .ah-legend i.down { background: #d8593f; margin-left: 5px; }
 
 .metric-grid {
   display: grid;
@@ -3347,7 +3687,7 @@ footer {
 .store-settings-card h2 {
   margin: 0;
   color: white;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 17px;
   font-weight: 800;
 }
@@ -3399,7 +3739,7 @@ footer {
 .page-intro h1 {
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(28px, 4vw, 40px);
   line-height: 1.22;
   font-weight: 900;
@@ -3622,7 +3962,7 @@ footer {
 .modal-head h2 {
   margin: 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 24px;
   font-weight: 900;
 }
@@ -3750,7 +4090,7 @@ footer {
 .banner h1,
 .detail-header h1,
 .sect-head h2 {
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .menu-grid {
@@ -4291,6 +4631,24 @@ footer {
     border-radius: 23px;
   }
 
+  .market-board-persona-scene {
+    width: 100%;
+    height: 225px;
+  }
+
+  .market-board-persona {
+    bottom: -55px;
+    width: 155px;
+  }
+
+  .market-board-persona.female {
+    left: calc(50% - 150px);
+  }
+
+  .market-board-persona.male {
+    right: calc(50% - 150px);
+  }
+
   .landing-board-head {
     padding-left: 0;
     padding-right: 0;
@@ -4591,7 +4949,7 @@ footer {
 .settings-identity h1 {
   margin: 3px 0 0;
   color: var(--text);
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 25px;
   font-weight: 900;
   letter-spacing: -0.045em;
@@ -4741,7 +5099,7 @@ footer {
 
 .settings-panel-head h2 {
   margin: 2px 0 0;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 18px;
   font-weight: 900;
   letter-spacing: -0.035em;
@@ -5029,7 +5387,7 @@ footer {
 
 .market-hero h1 {
   margin: 7px 0 0;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(35px, 5vw, 52px);
   line-height: 1.12;
   font-weight: 900;
@@ -5224,7 +5582,7 @@ footer {
 
 .market-signal-card h2 {
   margin-top: 12px;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 19px;
   font-weight: 900;
   letter-spacing: -0.04em;
@@ -5317,7 +5675,7 @@ footer {
 
 .ranking-hero h1 {
   margin: 6px 0 0;
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: clamp(38px, 5vw, 58px);
   line-height: 1.05;
   font-weight: 900;
@@ -5355,8 +5713,8 @@ footer {
 
 .ranking-type-tabs {
   display: grid;
-  width: min(520px, 100%);
-  grid-template-columns: repeat(3, 1fr);
+  width: min(360px, 100%);
+  grid-template-columns: repeat(2, 1fr);
   gap: 5px;
   margin: 22px 0 13px;
   padding: 5px;
@@ -5740,6 +6098,97 @@ footer {
   color: var(--primary);
 }
 
+.chart-canvas {
+  position: relative;
+}
+
+.axis-label {
+  position: absolute;
+  right: 0;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--text-soft);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.axis-max {
+  top: 8px;
+}
+
+.axis-min {
+  bottom: 2px;
+}
+
+.chart-prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.chart-prices span {
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.chart-prices b {
+  margin-left: 4px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chart-band {
+  fill: var(--primary);
+  opacity: 0.12;
+}
+
+.chart-forecast {
+  stroke: var(--primary);
+  opacity: 0.85;
+}
+
+.chart-divider {
+  stroke: var(--app-line);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.chart-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.chart-legend i {
+  width: 14px;
+  height: 0;
+  border-top: 2.3px solid var(--primary);
+}
+
+.chart-legend .lg-forecast {
+  border-top-style: dashed;
+}
+
+.chart-legend .lg-band {
+  height: 9px;
+  border: none;
+  border-radius: 3px;
+  background: var(--primary);
+  opacity: 0.18;
+}
+
 .ranking-outlook {
   display: grid;
   height: 145px;
@@ -6004,7 +6453,7 @@ footer {
 }
 
 .consumption-heading h2 {
-  font-family: 'Noto Sans KR', sans-serif;
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 25px;
   font-weight: 900;
   letter-spacing: -0.045em;
@@ -6215,4 +6664,466 @@ footer {
   .consumption-heading {
     flex-direction: column;
   }
+}
+
+/* ── 대시보드 핵심 추천 카드 ─────────────────────────────────────── */
+
+.today-card {
+  margin-bottom: 20px;
+  padding: 22px 24px;
+  border-radius: 24px;
+  background: #fff;
+  border: 1px solid var(--app-line, #ece9e3);
+  box-shadow: 0 14px 36px rgba(40, 32, 24, 0.07);
+}
+
+.today-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+
+.today-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--text, #2c302e);
+}
+
+.today-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--primary-soft, #fbe7dd);
+  color: var(--primary, #c95626);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.today-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.today-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px 16px;
+  border-radius: 16px;
+  background: #faf8f5;
+  border: 1px solid var(--app-line, #f0ede7);
+}
+
+.today-metric.ai {
+  background: var(--primary-soft, #fbe7dd);
+  border-color: transparent;
+}
+
+.today-metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft, #8a8f8b);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.today-metric.ai .today-metric-label {
+  color: var(--primary, #c95626);
+}
+
+.today-metric strong {
+  font-size: 23px;
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  color: var(--text, #2c302e);
+  white-space: nowrap;
+}
+
+.today-metric.ai strong {
+  color: var(--primary, #c95626);
+}
+
+.today-metric .today-badge {
+  padding: 2px 7px;
+  background: var(--primary, #c95626);
+  color: #fff;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.today-report-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 13px 16px;
+  border-radius: 14px;
+  background: var(--navy, #2c302e);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  transition: opacity 0.15s;
+}
+
+.today-report-link:hover { opacity: 0.9; }
+
+@media (max-width: 520px) {
+  .today-metric strong { font-size: 20px; }
+}
+
+/* 제목 옆에 오늘 매출 카드 배치 */
+.welcome-row { align-items: stretch; }
+
+.welcome-row { gap: 32px; }
+
+.welcome-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 auto;
+}
+
+.welcome-left .welcome-actions {
+  margin-top: 22px;
+}
+
+.today-card-side {
+  flex: 0 0 auto;
+  width: min(420px, 38%);
+  margin-bottom: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.today-card-side .today-metrics {
+  margin-top: 4px;
+}
+
+@media (max-width: 860px) {
+  .welcome-row { flex-direction: column; align-items: stretch; }
+  .welcome-left { flex: 1 1 auto; }
+  .welcome-left .welcome-actions { margin-top: 16px; padding-top: 0; }
+  .today-card-side { width: 100%; min-width: 0; }
+}
+
+.rec-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 28px;
+  margin-bottom: 38px;
+  padding: 32px 36px;
+  border-radius: 28px;
+  background: linear-gradient(130deg, #292d2f 0%, #3d2e25 58%, #6f4330 100%);
+  box-shadow: 0 24px 60px rgba(37, 29, 21, 0.24);
+  color: white;
+}
+
+.rec-hero-body {
+  min-width: 0;
+}
+
+.rec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #e8a87a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  backdrop-filter: blur(8px);
+}
+
+.rec-menu-name {
+  margin: 14px 0 10px;
+  color: white;
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 900;
+  letter-spacing: -0.05em;
+  line-height: 1.1;
+}
+
+.rec-stats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+}
+
+.rec-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+  flex: 0 0 3px;
+}
+
+.rec-trend-up { color: #7ed4a6; font-weight: 800; }
+.rec-trend-down { color: #f4a091; font-weight: 800; }
+
+.rec-note {
+  margin: 18px 0 0;
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.rec-note strong { color: white; }
+
+.rec-note-ok {
+  background: rgba(100, 180, 130, 0.12);
+  border-color: rgba(100, 200, 140, 0.2);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.rec-cta-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #e8a87a;
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.rec-cta-link:hover { color: #f0c49a; }
+
+.rec-hero-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100px;
+  height: 100px;
+  flex: 0 0 100px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rec-hero-rank > span {
+  color: white;
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+
+.rec-hero-rank > small {
+  margin-top: 5px;
+  color: #e8a87a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.data-date-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 14px;
+  border-radius: 13px;
+  background: var(--surface-soft);
+  border: 1px solid var(--app-line);
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .rec-hero {
+    grid-template-columns: 1fr;
+    padding: 24px 20px;
+    border-radius: 24px;
+    gap: 20px;
+  }
+
+  .rec-hero-rank {
+    display: none;
+  }
+}
+
+/* ── UI POLISH 2026-06-25: 디자인 언어 통일 ────────────────────────── */
+
+/* 1. bp-* 카드 border-radius · border 색상 · 그림자 통일 */
+.bp-decision-section,
+.bp-analysis-panel,
+.bp-report-section,
+.bp-menu-browser,
+.bp-menu-detail-panel,
+.bp-limitations,
+.bp-ranking-section {
+  border-color: var(--app-line);
+  border-radius: 22px;
+  box-shadow: var(--shadow-sm);
+}
+
+.bp-follow-up { border-radius: 22px; }
+.bp-state-panel { border-radius: 22px; }
+.bp-inline-empty,
+.bp-inline-state { border-radius: 16px; border-color: var(--app-line); }
+
+/* 2. 다크 카드 */
+.bp-risk-hero { border-radius: 22px; }
+.bp-store-risk-board { border-radius: 22px; }
+.bp-ai-brief { border-radius: 22px; }
+
+/* 3. 지표 그리드 */
+.bp-summary-row,
+.bp-menu-stats,
+.bp-report-metrics {
+  border-radius: 22px;
+  border-color: var(--app-line);
+  background: var(--app-line);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 4. 서브 카드: findings · action-plans · chart */
+.bp-findings article {
+  border-color: var(--app-line);
+  border-radius: 16px;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.bp-findings article:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.bp-action-plans article {
+  border-color: var(--app-line);
+  border-radius: 16px;
+}
+
+.bp-action-plans button { border-radius: 14px; }
+
+.bp-report-chart-grid article {
+  border-color: var(--app-line);
+  border-radius: 16px;
+}
+
+/* 5. 섹션 번호 배지 */
+.bp-report-section > header > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 11px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* 6. 분석 기간 박스 */
+.bp-report-basis {
+  border-radius: 14px;
+  border-left-width: 4px;
+}
+
+/* 7. 소스 카드 */
+.bp-source-list article {
+  padding: 16px 20px;
+  border: 1px solid var(--app-line);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  transition: box-shadow 0.18s ease;
+}
+
+.bp-source-list article:hover { box-shadow: var(--shadow-sm); }
+.bp-source-list article strong { font-size: 13px; }
+.bp-source-list article p { margin-top: 6px; color: var(--text-soft); font-size: 12px; }
+
+/* 8. 시장 위험 카드 */
+.bp-market-risk-list article {
+  border-radius: 16px;
+  border: 1px solid var(--app-line);
+  background: var(--surface-soft);
+}
+
+/* 9. 답변 패널 */
+.bp-answer { border-radius: 16px; }
+
+/* 10. 질문 칩 */
+.bp-question-chips button {
+  border-radius: 12px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.bp-question-chips button:hover {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* 11. 폼 요소 */
+.bp-follow-up input { border-radius: 14px; }
+.bp-follow-up form button { border-radius: 14px; }
+
+/* 12. 버튼 / 리스트 아이템 */
+.bp-compact-list button { border-radius: 14px; }
+.bp-ranked-action-list button { border-radius: 14px; }
+.bp-store-risk-list > button { border-radius: 16px; }
+.bp-store-risk-empty { border-radius: 16px; }
+.bp-state-panel button,
+.bp-inline-empty button { border-radius: 14px; }
+
+/* 13. 탭 */
+.bp-tab-row button { border-radius: 12px; }
+
+/* 14. 리더 그리드 */
+.bp-leader-grid button {
+  border-radius: 16px;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.bp-leader-grid button:hover {
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+/* 15. 증거 노트 */
+.bp-evidence-note { border-radius: 12px; border-left-width: 4px; }
+
+/* 16. 기타 */
+.bp-market-reference { border-radius: 22px; }
+.bp-preview-card { border-radius: 22px; }
+.bp-risk-copy dl { border-radius: 12px; overflow: hidden; }
+.bp-store-risk-list dl { border-radius: 10px; overflow: hidden; }
+
+/* 17. 랜딩 problems 카드 hover */
+.landing-problems article {
+  transition: box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.landing-problems article:hover {
+  box-shadow: 0 22px 58px rgba(37, 29, 60, 0.12);
+  transform: translateY(-3px);
+}
+
+/* 18. 랜딩 board-grid 아이템: active 상태 개선 */
+.landing-board-grid > a > span {
+  transition: background 0.22s ease, color 0.22s ease, box-shadow 0.22s ease;
+}
+
+/* 19. 헤더 profile-button 아바타 색상 일관성 */
+.profile-avatar {
+  background: linear-gradient(145deg, #d47b4d, #aa502a);
+  color: white;
 }

@@ -28,7 +28,9 @@ from .models import (
 from .analysis_service import (
     build_analysis_report,
     build_market_risk,
+    build_store_market_risks,
     build_store_analysis,
+    _percent,
 )
 from .calculator import (
     calculate_menu,
@@ -406,9 +408,18 @@ def api_store_analysis(request):
     store = get_user_store(request.user)
     if store is None:
         return Response({"detail": "먼저 매장을 등록해주세요."}, status=409)
+
+    def _parse_date(value):
+        try:
+            return date.fromisoformat(value) if value else None
+        except ValueError:
+            return None
+
+    date_from = _parse_date(request.query_params.get("from"))
+    date_to = _parse_date(request.query_params.get("to"))
     return Response({
-        "analysis": build_store_analysis(store),
-        "market_risk": build_market_risk(),
+        "analysis": build_store_analysis(store, date_from=date_from, date_to=date_to),
+        "market_risks": build_store_market_risks(store),
     })
 
 
@@ -464,31 +475,38 @@ def api_analysis_follow_up(request):
     question = str(request.data.get("question") or "").strip()
     if not question:
         return Response({"detail": "질문을 입력해주세요."}, status=400)
+
     report = build_analysis_report(store)
-    top = report["sales_analysis"]["summary"]["top_food_menu"]
-    if "가장" in question or "먼저" in question:
-        answer = (
-            f"현재 먼저 확인할 메뉴는 {top['name']}입니다. 최근 분석기간 "
-            f"판매량 {top['quantity']:,}개로 음식 메뉴 1위입니다. "
-            "다만 레시피 연결 전에는 원가 위험이나 수익성을 판단할 수 없습니다."
-            if top
-            else "판매 데이터가 없어 우선 메뉴 판매자료를 연결해야 합니다."
-        )
-    elif "양파" in question:
-        risk = report["market_risks"][0] if report["market_risks"] else None
-        answer = (
-            risk.get("impact_message")
-            if risk and risk.get("impact_state") == "INSUFFICIENT"
-            else "양파와 연결된 메뉴 영향 데이터를 확인했습니다."
-        )
-    else:
-        answer = (
-            "현재 답변은 저장된 판매 통계와 시장가격 예측만 사용합니다. "
-            "문서 RAG와 외부 LLM은 아직 연결되지 않아 근거 문서를 생성하지 않습니다."
-        )
+
+    # 1차: OpenAI LLM
+    try:
+        from .llm_service import build_store_context, call_openai_follow_up
+        context = build_store_context(report)
+        answer, engine = call_openai_follow_up(question, context)
+    except (ValueError, ImportError):
+        # API 키 미설정 또는 패키지 미설치 → 규칙 기반 폴백
+        engine = "STRUCTURED_ANALYSIS"
+        top = report["sales_analysis"]["summary"]["top_food_menu"]
+        if "가장" in question or "먼저" in question:
+            answer = (
+                f"현재 먼저 확인할 메뉴는 {top['name']}입니다. 최근 분석기간 "
+                f"판매량 {top['quantity']:,}개로 음식 메뉴 1위입니다. "
+                "다만 레시피 연결 전에는 원가 위험이나 수익성을 판단할 수 없습니다."
+                if top
+                else "판매 데이터가 없어 우선 메뉴 판매자료를 연결해야 합니다."
+            )
+        else:
+            answer = (
+                "OPENAI_API_KEY가 설정되지 않아 규칙 기반 분석만 제공합니다. "
+                ".env에 OPENAI_API_KEY를 추가하면 더 정확한 답변을 드릴 수 있습니다."
+            )
+    except Exception:
+        engine = "STRUCTURED_ANALYSIS"
+        answer = "AI 답변 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+
     return Response({
         "answer": answer,
-        "engine": "STRUCTURED_ANALYSIS",
+        "engine": engine,
         "used_tools": [
             "get_store_sales_summary",
             "get_menu_sales_ranking",
@@ -577,6 +595,7 @@ def _market_item_payload(snapshot):
     for forecast in item.forecasts.filter(
         as_of_date__lte=snapshot.as_of_date,
         horizon_days__in=[1, 7, 30],
+        is_demo=False,
     ).order_by("horizon_days", "-as_of_date", "-created_at"):
         forecasts.setdefault(forecast.horizon_days, forecast)
     observation_query = item.observations.filter(
@@ -592,6 +611,25 @@ def _market_item_payload(snapshot):
         )
     observations = list(observation_query[:14])
     latest = observations[0] if observations else None
+
+    # 일주일치 일별 예측 시계열 (그래프용): 최신 예측 실행의 +1~+7일 포인트
+    forecast_run = item.forecast_runs.filter(
+        as_of_date__lte=snapshot.as_of_date,
+        status="SUCCEEDED",
+    ).order_by("-as_of_date", "-created_at").first()
+    forecast_series = []
+    if forecast_run:
+        for point in forecast_run.points.filter(
+            horizon_days__lte=7
+        ).order_by("horizon_days"):
+            forecast_series.append({
+                "date": point.target_date.isoformat(),
+                "horizon_days": point.horizon_days,
+                "median": float(point.median),
+                "lower": float(point.lower),
+                "upper": float(point.upper),
+            })
+
     decision = recommendation.decision if recommendation else "WATCH"
     decision_labels = dict(MarketRecommendation.DECISION_CHOICES)
     tones = {"BUY": "buy", "WATCH": "watch", "AVOID": "avoid"}
@@ -611,7 +649,7 @@ def _market_item_payload(snapshot):
             else None
         ),
         "score": float(snapshot.score),
-        "change_rate": float(snapshot.display_change_rate),
+        "change_rate": _percent(snapshot.display_change_rate),
         "current_price": float(latest.price) if latest else None,
         "decision": decision_labels.get(decision, "관망"),
         "decision_code": decision,
@@ -622,7 +660,7 @@ def _market_item_payload(snapshot):
         "outlooks": [
             {
                 "horizon_days": horizon,
-                "change_rate": float(forecasts[horizon].expected_change_rate),
+                "change_rate": _percent(forecasts[horizon].expected_change_rate),
                 "predicted_price": float(forecasts[horizon].predicted_price),
                 "lower_price": float(forecasts[horizon].lower_price),
                 "upper_price": float(forecasts[horizon].upper_price),
@@ -644,6 +682,7 @@ def _market_item_payload(snapshot):
             }
             for observation in reversed(observations)
         ],
+        "forecast_series": forecast_series,
         "source": latest.source if latest else None,
         "is_demo": snapshot.is_demo,
     }

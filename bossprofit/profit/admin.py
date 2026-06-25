@@ -46,9 +46,9 @@ class RecipeItemInline(admin.TabularInline):
 class IngredientAdmin(admin.ModelAdmin):
     list_display = (
         "store", "name", "category", "purchase_quantity", "unit",
-        "purchase_price", "unit_cost_display",
+        "purchase_price", "unit_cost_display", "is_hq_supplied",
     )
-    list_filter = ("store", "category")
+    list_filter = ("store", "category", "is_hq_supplied")
     search_fields = ("store__name", "name", "ingredient_id")
     ordering = ("category", "name")
 

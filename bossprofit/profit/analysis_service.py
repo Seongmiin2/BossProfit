@@ -10,6 +10,7 @@ from .models import (
     IngredientMarketMapping,
     MarketRankingSnapshot,
     Menu,
+    ProfitAssumption,
     RecipeItem,
 )
 
@@ -23,6 +24,30 @@ MENU_IMAGE_KEYS = {
     "튀김만두": "fried-dumplings",
     "1인세트 돈가스": "tonkatsu-set",
 }
+
+
+def resolve_menu_image_key(name):
+    """메뉴명에서 사진 키를 결정. 정확히 일치하면 그 사진을, 아니면
+    같은 종류(우동·돈까스·만두)의 대표 사진을 매칭한다."""
+    if not name:
+        return None
+    exact = MENU_IMAGE_KEYS.get(name)
+    if exact:
+        return exact
+    n = name.replace(" ", "")
+    if "우동" in n:
+        if "어묵" in n:
+            return "fishcake-udon"
+        if "매" in n:  # 매운 계열
+            return "spicy-udon"
+        return "udon"
+    if ("돈까스" in n) or ("돈가스" in n) or ("카츠" in n):
+        if ("세트" in n) or ("1인" in n) or ("2인" in n):
+            return "tonkatsu-set"
+        return "tonkatsu"
+    if ("만두" in n) or ("튀만" in n) or ("찐만" in n):  # 튀만=튀김만두, 찐만=찐만두
+        return "fried-dumplings"
+    return None
 
 
 def _percent(value):
@@ -44,11 +69,10 @@ def _sale_period(sales):
 
 
 def _menu_recipe_status(menu):
-    recipe_count = RecipeItem.objects.filter(menu=menu).count()
-    mapped_count = IngredientMarketMapping.objects.filter(
-        ingredient__used_in__menu=menu,
-        status="CONFIRMED",
-    ).distinct().count()
+    recipe_items = list(
+        RecipeItem.objects.filter(menu=menu).select_related("ingredient")
+    )
+    recipe_count = len(recipe_items)
     if recipe_count == 0:
         return {
             "status": "INSUFFICIENT",
@@ -56,18 +80,45 @@ def _menu_recipe_status(menu):
             "recipe_count": 0,
             "mapped_ingredient_count": 0,
         }
-    if mapped_count == 0:
+
+    # 본사 납품 재료는 납품가가 고정이라 시장가격 변동 영향이 거의 없으므로
+    # 시장 품목 연결이 필요 없다. 시장 연결 대상은 본사 납품이 아닌 재료뿐이다.
+    market_ingredient_ids = {
+        ri.ingredient_id
+        for ri in recipe_items
+        if not ri.ingredient.is_hq_supplied
+    }
+
+    if not market_ingredient_ids:
+        # 모든 재료가 본사 납품 → 시장 연결 불필요, 분석 준비 완료
+        return {
+            "status": "READY",
+            "reason": "본사 납품 재료로 구성되어 시장 연결이 필요 없습니다.",
+            "recipe_count": recipe_count,
+            "mapped_ingredient_count": 0,
+            "hq_only": True,
+        }
+
+    mapped_ids = set(
+        IngredientMarketMapping.objects.filter(
+            ingredient_id__in=market_ingredient_ids,
+            status="CONFIRMED",
+        ).values_list("ingredient_id", flat=True)
+    )
+    unmapped = market_ingredient_ids - mapped_ids
+
+    if unmapped:
         return {
             "status": "INSUFFICIENT",
             "reason": "시장 품목 연결 없음",
             "recipe_count": recipe_count,
-            "mapped_ingredient_count": 0,
+            "mapped_ingredient_count": len(mapped_ids),
         }
     return {
         "status": "READY",
         "reason": None,
         "recipe_count": recipe_count,
-        "mapped_ingredient_count": mapped_count,
+        "mapped_ingredient_count": len(mapped_ids),
     }
 
 
@@ -159,8 +210,138 @@ def build_market_risk(as_of_date=None):
     }
 
 
-def build_store_analysis(store):
-    sales = DailyMenuSale.objects.filter(store=store)
+def build_store_market_risks(store, as_of_date=None, limit=5):
+    """Return only market risks connected to ingredients this store actually uses."""
+
+    mapped_item_ids = IngredientMarketMapping.objects.filter(
+        ingredient__store=store,
+        ingredient__used_in__menu__store=store,
+        ingredient__used_in__menu__is_active=True,
+        status="CONFIRMED",
+    ).values_list("market_item_id", flat=True).distinct()
+    snapshots = MarketRankingSnapshot.objects.filter(
+        ranking_type="TOMORROW",
+        item_id__in=mapped_item_ids,
+        is_demo=False,
+    )
+    if as_of_date:
+        snapshots = snapshots.filter(as_of_date__lte=as_of_date)
+    latest_date = snapshots.order_by("-as_of_date").values_list(
+        "as_of_date",
+        flat=True,
+    ).first()
+    if latest_date is None:
+        mapped_count = IngredientMarketMapping.objects.filter(
+            ingredient__store=store,
+            ingredient__used_in__menu__store=store,
+            ingredient__used_in__menu__is_active=True,
+            status="CONFIRMED",
+        ).values("market_item_id").distinct().count()
+        return {
+            "state": "INSUFFICIENT",
+            "items": [],
+            "connected_item_count": mapped_count,
+            "message": (
+                "내 가게 메뉴에 연결된 시장 품목이 없습니다."
+                if mapped_count == 0
+                else "연결된 재료의 실제 시장 예측이 아직 없습니다."
+            ),
+            "action": {
+                "label": "판매 주력 메뉴부터 재료 연결",
+                "path": "/ingredients",
+            },
+        }
+
+    results = []
+    ranked = snapshots.filter(as_of_date=latest_date).select_related(
+        "item"
+    ).order_by("-display_change_rate", "rank")[:limit]
+    for store_rank, snapshot in enumerate(ranked, start=1):
+        item = snapshot.item
+        observation = item.observations.filter(
+            observed_date__lte=latest_date,
+            is_demo=False,
+        ).order_by("-observed_date", "-collected_at").first()
+        forecasts = {}
+        for forecast in item.forecasts.filter(
+            as_of_date__lte=latest_date,
+            horizon_days__in=(7, 30),
+            is_demo=False,
+        ).order_by("horizon_days", "-as_of_date", "-created_at"):
+            forecasts.setdefault(forecast.horizon_days, forecast)
+        primary_forecast = forecasts.get(30) or forecasts.get(7)
+        affected_menus = list(
+            Menu.objects.filter(
+                store=store,
+                is_active=True,
+                recipe_items__ingredient__market_mappings__market_item=item,
+                recipe_items__ingredient__market_mappings__status="CONFIRMED",
+            )
+            .distinct()
+            .values("menu_id", "name")[:5]
+        )
+        results.append({
+            "rank": store_rank,
+            "as_of_date": latest_date.isoformat(),
+            "item": {
+                "code": item.code,
+                "name": item.name,
+                "unit": item.unit,
+                "image_key": item.image_key,
+            },
+            "current_price": float(observation.price) if observation else None,
+            "current_price_date": (
+                observation.observed_date.isoformat() if observation else None
+            ),
+            "headline_change_rate": (
+                _percent(primary_forecast.expected_change_rate)
+                if primary_forecast
+                else _percent(snapshot.display_change_rate)
+            ),
+            "forecasts": [
+                {
+                    "horizon_days": horizon,
+                    "change_rate": _percent(
+                        forecasts[horizon].expected_change_rate
+                    ),
+                    "predicted_price": float(
+                        forecasts[horizon].predicted_price
+                    ),
+                    "lower_price": float(forecasts[horizon].lower_price),
+                    "upper_price": float(forecasts[horizon].upper_price),
+                    "confidence": forecasts[horizon].confidence_grade,
+                    "model_version": forecasts[horizon].model_version,
+                }
+                for horizon in (7, 30)
+                if horizon in forecasts
+            ],
+            "affected_menus": affected_menus,
+            "impact_state": "READY",
+            "impact_message": (
+                f"{', '.join(menu['name'] for menu in affected_menus)} 메뉴가 "
+                f"{item.name} 가격 변화의 영향을 받을 수 있습니다."
+            ),
+            "cause": "실제 시장가격과 시계열 예측을 반영했습니다.",
+        })
+    return {
+        "state": "SUCCESS",
+        "items": results,
+        "connected_item_count": len(results),
+        "as_of_date": latest_date.isoformat(),
+        "message": None,
+    }
+
+
+def build_store_analysis(store, date_from=None, date_to=None):
+    all_sales = DailyMenuSale.objects.filter(store=store)
+    available_period = _sale_period(all_sales)  # 선택 가능한 전체 데이터 범위
+
+    sales = all_sales
+    if date_from:
+        sales = sales.filter(sale_date__gte=date_from)
+    if date_to:
+        sales = sales.filter(sale_date__lte=date_to)
+
     active_menus = Menu.objects.filter(store=store, is_active=True)
     food_sales = sales.filter(menu__category__in=FOOD_CATEGORIES)
     period = _sale_period(sales)
@@ -237,14 +418,37 @@ def build_store_analysis(store):
             and previous_quantity not in (None, 0)
             else None
         )
-        if recipe["status"] == "READY":
-            state = "COST_DEFENSE"
-            state_label = "원가 방어"
-            state_reason = "레시피와 시장 품목 연결 완료"
-        elif index <= 5:
+        # 수익성(원가율·마진)은 레시피와 가격만 있으면 계산 가능하다.
+        # 시장 품목 연결은 시장가격 위험 계산에만 필요하므로 분리한다.
+        can_cost = recipe["recipe_count"] > 0 and (menu.price or 0) > 0
+        if can_cost:
+            food_cost = round(menu.food_cost())
+            packaging = menu.packaging_cost or 0
+            total_cost = food_cost + packaging
+            margin_amount = menu.price - total_cost
+            profitability = {
+                "food_cost": food_cost,
+                "packaging_cost": packaging,
+                "total_cost": total_cost,
+                "food_cost_rate": round(food_cost / menu.price, 4),
+                "margin_amount": margin_amount,
+                "margin_rate": round(margin_amount / menu.price, 4),
+                "price": menu.price,
+                "basis": "재료원가 기준 (인건비·임대료 등 고정비 제외)",
+            }
+        else:
+            profitability = None
+
+        # 판매량 상위 메뉴는 원가 준비 여부와 무관하게 '판매 주력'으로 유지한다.
+        # (본사 납품 등으로 READY가 되어도 주력 판매 메뉴에서 빠지지 않도록)
+        if index <= 5:
             state = "SALES_LEADER"
             state_label = "판매 주력"
             state_reason = f"음식 판매량 {index}위"
+        elif recipe["status"] == "READY":
+            state = "COST_DEFENSE"
+            state_label = "원가 방어"
+            state_reason = "레시피와 시장 품목 연결 완료"
         else:
             state = "ANALYSIS_PENDING"
             state_label = "분석 대기"
@@ -253,7 +457,7 @@ def build_store_analysis(store):
             "menu_id": row["menu__menu_id"],
             "name": row["menu__name"],
             "category": row["menu__category"],
-            "image_key": MENU_IMAGE_KEYS.get(row["menu__name"]),
+            "image_key": resolve_menu_image_key(row["menu__name"]),
             "rank": index,
             "quantity": row["quantity"],
             "net_revenue": row["net_revenue"],
@@ -274,14 +478,16 @@ def build_store_analysis(store):
             "state_reason": state_reason,
             "recipe": recipe,
             "profitability_state": (
-                "AVAILABLE"
-                if recipe["status"] == "READY"
-                else "INSUFFICIENT"
+                "AVAILABLE" if can_cost else "INSUFFICIENT"
             ),
             "profitability_message": (
                 None
-                if recipe["status"] == "READY"
-                else "원가 또는 레시피 연결이 없어 수익성을 판단하지 않습니다."
+                if can_cost
+                else "레시피 연결이 없어 수익성을 판단하지 않습니다."
+            ),
+            "profitability": profitability,
+            "price_risk_state": (
+                "AVAILABLE" if recipe["status"] == "READY" else "INSUFFICIENT"
             ),
         })
 
@@ -305,10 +511,47 @@ def build_store_analysis(store):
     )
     ready_count = sum(menu["recipe"]["status"] == "READY" for menu in menus)
 
+    # 오늘 매출: 가장 최근 판매일의 실제 매출.
+    today_revenue = (
+        sales.filter(sale_date=latest_date).aggregate(rev=Sum("net_revenue"))["rev"]
+        if latest_date
+        else 0
+    ) or 0
+    # AI 예측 매출: 최근 30일 기록일의 일평균 매출(하루치 예상).
+    recent_revenue = (
+        sales.filter(
+            sale_date__gte=recent_start,
+            sale_date__lte=latest_date,
+        ).aggregate(
+            rev=Sum("net_revenue"),
+            days=Count("sale_date", distinct=True),
+        )
+        if latest_date
+        else {"rev": 0, "days": 0}
+    )
+    recent_days = recent_revenue["days"] or 0
+    ai_forecast = (
+        round((recent_revenue["rev"] or 0) / recent_days) if recent_days else 0
+    )
+    # 채널 분리(매장/배달) 데이터가 없으므로 매장 운영 가정 비중으로 예측을 분할한다.
+    assumption = ProfitAssumption.get_active(store=store) if store else None
+    delivery_share = assumption.delivery_share if assumption else 0.3
+    store_share = max(0.0, 1.0 - delivery_share)  # 홀+포장
+    today_estimate_block = {
+        "total": today_revenue,
+        "date": latest_date.isoformat() if latest_date else None,
+        "ai_forecast": ai_forecast,
+        "basis_days": recent_days,
+        "dine_in": round(ai_forecast * store_share),
+        "delivery": round(ai_forecast * delivery_share),
+        "delivery_share": round(delivery_share, 2),
+    }
+
     return {
         "state": "SUCCESS" if sales.exists() else "EMPTY",
         "store": {"id": store.id, "name": store.name, "region": store.region},
         "period": period,
+        "available_period": available_period,
         "data_as_of": period["to"],
         "summary": {
             "product_count": active_menus.count(),
@@ -323,6 +566,7 @@ def build_store_analysis(store):
             "food_net_revenue": food["net_revenue"] or 0,
             "top_food_menu": menus[0] if menus else None,
             "price_risk_ready_menu_count": ready_count,
+            "today_estimate": today_estimate_block,
         },
         "menus": menus,
         "top_menus": menus[:5],
@@ -356,7 +600,7 @@ def build_store_analysis(store):
 
 def build_analysis_report(store):
     analysis = build_store_analysis(store)
-    market_risk = build_market_risk()
+    store_market_risks = build_store_market_risks(store)
     top = analysis["summary"]["top_food_menu"]
     summary = (
         f"{analysis['period']['from']}부터 {analysis['period']['to']}까지 "
@@ -366,8 +610,8 @@ def build_analysis_report(store):
     if top:
         summary += (
             f" {top['name']}가 {top['quantity']:,}개로 음식 판매량 1위입니다."
-            " 이는 판매성과이며 수익성 1위를 의미하지 않습니다."
         )
+    used_llm = False
     findings = []
     for menu in analysis["top_menus"][:3]:
         findings.append({
@@ -408,7 +652,7 @@ def build_analysis_report(store):
         "confidence": "high",
         "limitations": ["메뉴별 레시피·시장 품목 매핑 필요"],
     })
-    return {
+    report = {
         "state": analysis["state"],
         "summary": summary,
         "confidence": "medium",
@@ -440,7 +684,7 @@ def build_analysis_report(store):
             },
         ],
         "findings": findings,
-        "market_risks": [market_risk] if market_risk["state"] == "SUCCESS" else [],
+        "market_risks": store_market_risks["items"],
         "recommended_actions": [
             {
                 "period": "오늘",
@@ -471,8 +715,18 @@ def build_analysis_report(store):
             "message": "관련 근거 문서를 찾지 못했습니다.",
         },
         "sales_analysis": analysis,
-        "limitations": analysis["limitations"] + [
-            "현재 리포트 설명은 SQL 집계와 규칙 기반 해석이며 외부 LLM이 아닙니다.",
-            "RAG 문서가 없어 문서 근거를 생성하지 않았습니다.",
-        ],
+        "limitations": analysis["limitations"],
+        "used_llm": used_llm,
     }
+
+    # LLM 요약 시도 (API 키 있을 때만)
+    try:
+        from .llm_service import generate_report_summary
+        llm_text, ok = generate_report_summary(report)
+        if ok and llm_text:
+            report["summary"] = llm_text
+            report["used_llm"] = True
+    except Exception:
+        pass
+
+    return report

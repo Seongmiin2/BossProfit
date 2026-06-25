@@ -44,7 +44,7 @@ const handleLogout = async () => {
           <span class="brand-mark">B</span>
           <span class="brand-copy">
             <strong>BOSSPROFIT</strong>
-            <small>내 가게 수익 비서</small>
+            <small>내 가게 가격 레이더</small>
           </span>
         </router-link>
 
@@ -60,8 +60,8 @@ const handleLogout = async () => {
           <button
             v-if="authStore.isLoggedIn"
             class="icon-button"
-            title="수익 다시 계산하기"
-            aria-label="수익 다시 계산하기"
+            title="매장 분석 다시 계산하기"
+            aria-label="매장 분석 다시 계산하기"
             @click="handleRecalculate"
           >
             <AppIcon name="refresh" :size="19" />
@@ -102,7 +102,7 @@ const handleLogout = async () => {
     </main>
 
     <footer v-if="!isImmersive">
-      <p>BOSSPROFIT · 사장님의 더 나은 결정을 돕습니다</p>
+      <p>BOSSPROFIT · 가격 위험을 먼저 보고, 메뉴 영향을 판단합니다</p>
     </footer>
 
     <nav v-if="!isImmersive && authStore.isLoggedIn" class="bottom-nav" aria-label="모바일 주요 메뉴">

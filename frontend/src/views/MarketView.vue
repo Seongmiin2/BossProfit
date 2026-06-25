@@ -1,194 +1,153 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import BossPersona from '@/components/BossPersona.vue'
+import api from '@/api/client'
 
 const router = useRouter()
-const activeScope = ref('briefing')
-const searchQuery = ref('')
 
-function searchItem() {
-  router.push({
-    name: 'MarketRanking',
-    params: { type: 'tomorrow' },
-    query: searchQuery.value.trim() ? { q: searchQuery.value.trim() } : {},
-  })
+const TYPES = [
+  { key: 'tomorrow', label: 'AI 가격 전망', sub: '30일 예상 변동률 기준' },
+  { key: 'today',    label: '오늘 변동',    sub: '직전 거래일 대비 등락률' },
+]
+
+const panels = ref({ tomorrow: null, today: null })
+const loadingCount = ref(TYPES.length)
+const asOfDate = ref(null)
+
+function formatPct(v) {
+  if (v === null || v === undefined) return '--'
+  return `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`
 }
 
-const annualConsumption = [
-  { rank: 1, name: '양파', value: '연동 후 표시', unit: 'kg/인·년' },
-  { rank: 2, name: '배추', value: '연동 후 표시', unit: 'kg/인·년' },
-  { rank: 3, name: '무', value: '연동 후 표시', unit: 'kg/인·년' },
-]
+const go = (type) => router.push(`/market/rankings/${type}`)
 
-const marketSignals = [
-  {
-    key: 'volume',
-    eyebrow: '실시간 대리 지표',
-    title: '거래량 TOP 5',
-    description: '전국 공영도매시장 거래량·반입량',
-    rows: ['양파', '배추', '대파', '감자', '마늘'],
-    unit: '톤',
-    tone: 'sage',
-  },
-  {
-    key: 'today',
-    eyebrow: '오늘 시장',
-    title: '가격 변동 TOP 5',
-    description: '직전 유효 거래일 대비 절대 등락률',
-    rows: ['마늘', '양파', '배추', '대파', '감자'],
-    unit: '%',
-    tone: 'amber',
-  },
-  {
-    key: 'tomorrow',
-    eyebrow: 'AI 가격 전망',
-    title: '내일 예상 변동 TOP 5',
-    description: '내일 중앙 예측값 기준 예상 등락률',
-    rows: ['양파', '대파', '감자', '배추', '마늘'],
-    unit: '%',
-    tone: 'terracotta',
-  },
-]
-
-const sources = [
-  {
-    label: '공식 소비 수준',
-    name: 'KOSIS 식품수급 통계',
-    cadence: '연간',
-    usage: '1인당 공급량과 장기 소비 구조',
-    status: 'API 키 필요',
-    href: 'https://kosis.kr/openapi/index/index.jsp',
-  },
-  {
-    label: '구매 행동',
-    name: '농식품 소비자패널',
-    cadence: '월·연',
-    usage: '가구 구매량·구매빈도 분석',
-    status: '제공 범위 확인',
-    href: 'https://www.rda.go.kr/',
-  },
-  {
-    label: '일별 시장 신호',
-    name: '전국 공영도매시장 실시간 경매정보',
-    cadence: '실시간',
-    usage: '거래량·반입량 기반 수요 대리 지표',
-    status: '활용신청 필요',
-    href: 'https://www.data.go.kr/data/15141808/openapi.do',
-  },
-]
+onMounted(async () => {
+  await Promise.all(TYPES.map(async ({ key }) => {
+    try {
+      const { data } = await api.get(`/market/rankings/${key}/`, { params: { limit: 5 } })
+      panels.value[key] = data
+      if (!asOfDate.value && data.as_of_date) asOfDate.value = data.as_of_date
+    } catch {
+      panels.value[key] = { items: [], error: true }
+    } finally {
+      loadingCount.value--
+    }
+  }))
+})
 </script>
 
 <template>
-  <div class="market-page">
-    <section class="market-hero">
+  <div class="mv">
+
+    <div class="mv-header">
       <div>
-        <span class="section-kicker">MARKET INTELLIGENCE</span>
-        <h1>시장 흐름을<br>먼저 읽습니다.</h1>
-        <p>소비 구조, 오늘의 거래량, 내일의 가격 변화를 한곳에서 확인하세요.</p>
+        <span class="eyebrow">MARKET</span>
+        <h1>시장 가격 전망</h1>
       </div>
-      <div class="market-hero-persona">
-        <div class="market-hero-persona-pair" aria-label="시장 분석을 함께하는 남녀 사장님 페르소나">
-          <BossPersona persona="female" alt="" />
-          <BossPersona persona="male" alt="" />
+      <span v-if="asOfDate" class="mv-date">기준일 {{ asOfDate }}</span>
+    </div>
+
+    <div class="mv-grid">
+      <button
+        v-for="t in TYPES"
+        :key="t.key"
+        class="mv-card"
+        @click="go(t.key)"
+      >
+        <div class="mv-card-head">
+          <strong>{{ t.label }}</strong>
+          <span>{{ t.sub }}</span>
         </div>
-        <div>
-          <span>오늘의 시장 브리핑</span>
-          <strong>데이터 연결 준비 중</strong>
-          <small>현재 화면은 실제 연동 전 UI 시제품입니다.</small>
+
+        <div v-if="loadingCount > 0" class="mv-loading">
+          <div class="spinner small"></div>
         </div>
-      </div>
-    </section>
 
-    <nav class="market-scope-tabs" aria-label="시장 데이터 보기">
-      <button :class="{ active: activeScope === 'briefing' }" @click="activeScope = 'briefing'">시장 브리핑</button>
-      <button :class="{ active: activeScope === 'consumption' }" @click="activeScope = 'consumption'">소비량</button>
-      <button :class="{ active: activeScope === 'sources' }" @click="activeScope = 'sources'">데이터 출처</button>
-    </nav>
+        <div v-else-if="panels[t.key]?.error" class="mv-empty">데이터 없음</div>
 
-    <template v-if="activeScope === 'briefing'">
-      <form class="market-search" @submit.prevent="searchItem">
-        <span>품목 검색</span>
-        <input v-model="searchQuery" placeholder="양파, 배추, 대파..." aria-label="시장 품목 검색">
-        <button>검색</button>
-      </form>
+        <ol v-else class="mv-list">
+          <li
+            v-for="(item, i) in (panels[t.key]?.items || []).slice(0, 5)"
+            :key="item.code"
+          >
+            <b>{{ i + 1 }}</b>
+            <span class="mv-item-name">{{ item.name }}</span>
+            <span
+              class="mv-item-rate"
+              :class="item.change_rate > 3 ? 'rate-up' : item.change_rate < -3 ? 'rate-down' : 'rate-flat'"
+            >
+              {{ formatPct(item.change_rate) }}
+            </span>
+          </li>
+        </ol>
 
-      <section class="market-signal-grid">
-        <button
-          v-for="signal in marketSignals"
-          :key="signal.key"
-          class="market-signal-card"
-          :class="signal.tone"
-          @click="$router.push(`/market/rankings/${signal.key}`)"
-        >
-          <div class="market-card-heading">
-            <span>{{ signal.eyebrow }}</span>
-            <small>UI 예시</small>
-          </div>
-          <h2>{{ signal.title }}</h2>
-          <p>{{ signal.description }}</p>
-          <ol>
-            <li v-for="(item, index) in signal.rows" :key="item">
-              <b>{{ index + 1 }}</b>
-              <strong>{{ item }}</strong>
-              <span>-- {{ signal.unit }}</span>
-            </li>
-          </ol>
-          <footer>기준일·단위·출처가 연동 후 표시됩니다.</footer>
-        </button>
-      </section>
-    </template>
+        <div class="mv-card-foot">자세히 보기 →</div>
+      </button>
+    </div>
 
-    <section v-else-if="activeScope === 'consumption'" class="consumption-prototype">
-      <div class="consumption-heading">
-        <div>
-          <span class="section-kicker">ANNUAL CONSUMPTION</span>
-          <h2>많이 소비되는 농산물</h2>
-          <p>공식 연간 통계가 연결되면 1인당 공급량과 연도별 변화를 표시합니다.</p>
-        </div>
-        <span class="prototype-badge">연동 전 형태</span>
-      </div>
-
-      <div class="consumption-ranking">
-        <article v-for="item in annualConsumption" :key="item.name">
-          <span>{{ item.rank }}</span>
-          <div>
-            <strong>{{ item.name }}</strong>
-            <small>전국 기준</small>
-          </div>
-          <p>{{ item.value }} <small>{{ item.unit }}</small></p>
-        </article>
-      </div>
-
-      <div class="consumption-definition">
-        <strong>소비량은 이렇게 구분합니다.</strong>
-        <div>
-          <p><b>공식 소비 수준</b><span>식품수급표·국가통계의 연간 1인당 공급량</span></p>
-          <p><b>구매 소비</b><span>소비자패널의 가구 구매량과 구매빈도</span></p>
-          <p><b>일별 대리 지표</b><span>도매시장 거래량·반입량이며 소비량으로 부르지 않음</span></p>
-        </div>
-      </div>
-    </section>
-
-    <section v-else class="market-source-panel">
-      <div class="consumption-heading">
-        <div>
-          <span class="section-kicker">DATA SOURCES</span>
-          <h2>소비량 데이터 연결 계획</h2>
-          <p>갱신 주기와 의미가 다른 데이터를 한 순위로 섞지 않습니다.</p>
-        </div>
-      </div>
-      <div class="market-source-list">
-        <a v-for="source in sources" :key="source.name" :href="source.href" target="_blank" rel="noreferrer">
-          <span>{{ source.label }}</span>
-          <div>
-            <strong>{{ source.name }}</strong>
-            <p>{{ source.usage }}</p>
-          </div>
-          <small>{{ source.cadence }}</small>
-          <b>{{ source.status }}</b>
-        </a>
-      </div>
-    </section>
   </div>
 </template>
+
+<style scoped>
+.mv { display: flex; flex-direction: column; gap: 20px; }
+
+.mv-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.mv-header h1 { font-size: 24px; font-weight: 700; margin-top: 4px; }
+.mv-date { font-size: 12px; color: var(--ink-muted); padding-bottom: 4px; }
+
+.mv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+@media (max-width: 720px) { .mv-grid { grid-template-columns: 1fr; } }
+
+.mv-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  display: flex; flex-direction: column;
+  transition: box-shadow .15s, border-color .15s;
+}
+.mv-card:hover { border-color: var(--coral); box-shadow: 0 2px 12px rgba(224,120,86,.12); }
+
+.mv-card-head {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.mv-card-head strong { display: block; font-size: 15px; font-weight: 700; color: var(--ink); }
+.mv-card-head span   { font-size: 12px; color: var(--ink-muted); margin-top: 2px; display: block; }
+
+.mv-loading { padding: 32px; display: flex; justify-content: center; }
+.spinner.small { width: 20px; height: 20px; border-width: 2px; }
+.mv-empty { padding: 32px; text-align: center; color: var(--ink-muted); font-size: 13px; }
+
+.mv-list {
+  list-style: none;
+  padding: 8px 0;
+  flex: 1;
+}
+.mv-list li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+}
+.mv-list li:last-child { border-bottom: none; }
+.mv-list b { font-size: 12px; color: var(--ink-muted); width: 16px; flex-shrink: 0; }
+.mv-item-name { flex: 1; font-weight: 500; color: var(--ink); }
+.mv-item-rate { font-weight: 700; font-size: 14px; }
+.rate-up   { color: #C44536; }
+.rate-down { color: #2563EB; }
+.rate-flat { color: var(--ink-muted); }
+
+.mv-card-foot {
+  padding: 10px 18px;
+  font-size: 12px; font-weight: 600;
+  color: var(--coral);
+  border-top: 1px solid var(--line);
+}
+</style>

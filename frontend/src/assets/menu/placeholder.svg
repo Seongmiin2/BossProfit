@@ -1,0 +1,18 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="음식 사진 준비 중">
+  <rect width="200" height="200" fill="#F4EEE7"/>
+  <circle cx="100" cy="100" r="46" fill="#FFFFFF" stroke="#E4D9CC" stroke-width="3"/>
+  <circle cx="100" cy="100" r="30" fill="#FBF5EE" stroke="#EBDFD0" stroke-width="2"/>
+  <!-- fork -->
+  <g stroke="#C9966B" stroke-width="3.4" stroke-linecap="round">
+    <line x1="44" y1="60" x2="44" y2="92"/>
+    <line x1="38" y1="60" x2="38" y2="74"/>
+    <line x1="50" y1="60" x2="50" y2="74"/>
+    <line x1="44" y1="92" x2="44" y2="140"/>
+  </g>
+  <!-- knife -->
+  <g stroke="#C9966B" stroke-width="3.4" stroke-linecap="round">
+    <path d="M156 60 C150 60 150 84 156 92" />
+    <line x1="156" y1="92" x2="156" y2="140"/>
+  </g>
+  <text x="100" y="172" text-anchor="middle" font-family="Pretendard, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#A89A88">사진 준비중</text>
+</svg>

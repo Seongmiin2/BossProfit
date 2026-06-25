@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fetchStoreAnalysis } from '@/api/endpoints'
 import { formatKRW } from '@/utils/format'
-import { menuImages, produceImages } from '@/utils/productAssets'
 
 const router = useRouter()
 const data = ref(null)
@@ -14,149 +13,185 @@ const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await fetchStoreAnalysis()
-    data.value = response.data
+    const res = await fetchStoreAnalysis()
+    data.value = res.data
   } catch (e) {
     error.value = e.response?.data?.detail || e.message
   } finally {
     loading.value = false
   }
 }
-
 onMounted(load)
 
 const analysis = computed(() => data.value?.analysis)
-const risk = computed(() => data.value?.market_risk)
-const forecast = (days) => risk.value?.forecasts?.find((item) => item.horizon_days === days)
-const signed = (value) => `${value >= 0 ? '+' : ''}${Number(value).toFixed(1)}%`
-const salesLeaders = computed(() => analysis.value?.menus?.filter(item => item.state === 'SALES_LEADER').slice(0, 5) || [])
-const costDefense = computed(() => analysis.value?.menus?.filter(item => item.state === 'COST_DEFENSE').slice(0, 5) || [])
-const pending = computed(() => analysis.value?.menus?.filter(item => item.state === 'ANALYSIS_PENDING').slice(0, 5) || [])
+const marketRisks = computed(() => data.value?.market_risks)
+const riskItems = computed(() => marketRisks.value?.items || [])
+const topMenus = computed(() => (analysis.value?.menus || []).slice(0, 5))
+const heroMenu = computed(() => topMenus.value[0] || null)
+const todayRevenue = computed(() => analysis.value?.summary?.today_estimate || null)
+const signed = v =>
+  v != null ? `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed(1)}%` : null
+const forecast = (risk, days) => risk.forecasts?.find(f => f.horizon_days === days)
 </script>
 
 <template>
-  <div class="bp-dashboard">
-    <div v-if="loading" class="bp-state-panel">
-      <div class="spinner"></div><strong>시장과 매장 데이터를 연결하고 있습니다.</strong>
-    </div>
-    <div v-else-if="error" class="bp-state-panel error">
-      <strong>대시보드를 불러오지 못했습니다.</strong><p>{{ error }}</p>
-      <button @click="load">다시 시도</button>
+  <div>
+    <!-- Loading -->
+    <div v-if="loading" class="state-card">
+      <div class="spinner"></div>
+      <strong>매장 데이터를 분석하고 있습니다</strong>
     </div>
 
-    <template v-else-if="analysis">
-      <header class="bp-page-header">
-        <div>
-          <span class="bp-kicker">TODAY'S DECISION</span>
-          <h1>오늘 먼저 확인할 재료와 메뉴</h1>
-          <p>{{ analysis.store.name }} · 데이터 기준일 {{ analysis.data_as_of }}</p>
+    <!-- Error -->
+    <div v-else-if="error" class="state-card">
+      <strong>데이터를 불러오지 못했습니다</strong>
+      <p>{{ error }}</p>
+      <button class="primary-button full-button" @click="load">다시 시도</button>
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="!analysis || analysis.state === 'EMPTY'" class="state-card">
+      <strong>판매 데이터가 아직 없습니다</strong>
+      <p>POS 엑셀을 불러오면 메뉴 분석이 시작됩니다.</p>
+    </div>
+
+    <template v-else>
+      <!-- ① 페이지 헤더 + 오늘 매출 -->
+      <div class="welcome-row">
+        <div class="welcome-left">
+          <span class="eyebrow eyebrow-pill">📍 {{ analysis.store.name }}</span>
+          <h1>지금 <span class="hl">어떤 메뉴</span>를<br>밀어야 할까요?</h1>
         </div>
-        <router-link to="/history" class="bp-outline-button">AI 분석 리포트</router-link>
-      </header>
 
-      <section v-if="risk?.state === 'SUCCESS'" class="bp-risk-hero">
-        <div class="bp-risk-copy">
-          <span>오늘의 시장 위험</span>
-          <h2>{{ risk.item.name }} <b>{{ signed(risk.headline_change_rate) }}</b></h2>
-          <p>{{ risk.cause }}</p>
-          <dl>
-            <div><dt>현재 가격</dt><dd>{{ formatKRW(risk.current_price) }}원 / {{ risk.item.unit }}</dd></div>
-            <div><dt>7일 전망</dt><dd>{{ forecast(7) ? signed(forecast(7).change_rate) : '-' }}</dd></div>
-            <div><dt>30일 전망</dt><dd>{{ forecast(30) ? signed(forecast(30).change_rate) : '-' }}</dd></div>
-            <div><dt>신뢰도</dt><dd>{{ forecast(30)?.confidence || '검증 필요' }}</dd></div>
-          </dl>
-          <div class="bp-risk-interval" v-if="forecast(30)">
-            <span>30일 예측구간</span>
-            <strong>{{ formatKRW(forecast(30).lower_price) }}~{{ formatKRW(forecast(30).upper_price) }}원</strong>
+        <!-- 오늘 매출 (AI 예상) -->
+        <section v-if="todayRevenue" class="today-card today-card-side">
+          <div class="today-head">
+            <span class="today-title">오늘 매출</span>
+            <span v-if="todayRevenue.date" class="today-badge">{{ todayRevenue.date }}</span>
           </div>
+          <div class="today-metrics">
+            <div class="today-metric">
+              <span class="today-metric-label">실제 판매 매출</span>
+              <strong>{{ formatKRW(todayRevenue.total) }}원</strong>
+            </div>
+            <div class="today-metric ai">
+              <span class="today-metric-label">AI 예측 매출 <i class="today-badge">AI</i></span>
+              <strong>{{ formatKRW(todayRevenue.ai_forecast) }}원</strong>
+            </div>
+          </div>
+          <router-link to="/history" class="today-report-link">AI 분석 리포트 →</router-link>
+        </section>
+      </div>
+
+      <!-- ② 핵심 추천 카드 -->
+      <div v-if="heroMenu" class="rec-hero">
+        <div class="rec-hero-body">
+          <span class="rec-badge">지금 밀 메뉴</span>
+          <h2 class="rec-menu-name">{{ heroMenu.name }}</h2>
+          <div class="rec-stats">
+            <span>총 {{ heroMenu.quantity.toLocaleString() }}개 판매</span>
+            <i class="rec-dot"></i>
+            <span>{{ formatKRW(heroMenu.net_revenue) }}원</span>
+            <template v-if="heroMenu.trend_rate != null">
+              <i class="rec-dot"></i>
+              <span :class="heroMenu.trend_rate >= 0 ? 'rec-trend-up' : 'rec-trend-down'">
+                최근 30일 {{ signed(heroMenu.trend_rate) }}
+              </span>
+            </template>
+          </div>
+          <p v-if="heroMenu.recipe?.status !== 'READY'" class="rec-note">
+            재료를 연결하면 <strong>앞으로 재료비 변동 후에도 가장 남는 메뉴</strong>를 계산해드릴게요.
+            <router-link to="/ingredients" class="rec-cta-link">재료 연결하기 →</router-link>
+          </p>
+          <p v-else class="rec-note rec-note-ok">
+            원가 분석 연결 완료 ·
+            <router-link :to="`/menus/${heroMenu.menu_id}`" class="rec-cta-link">
+              자세한 분석 보기 →
+            </router-link>
+          </p>
         </div>
-        <img :src="produceImages[risk.item.image_key]" :alt="risk.item.name">
-        <div class="bp-risk-action">
-          <span>영향받을 수 있는 메뉴</span>
-          <strong v-if="risk.affected_menus?.length">{{ risk.affected_menus.map(item => item.name).join(', ') }}</strong>
-          <strong v-else>판단 보류</strong>
-          <p>{{ risk.impact_message || '레시피와 시장 품목 연결을 바탕으로 계산했습니다.' }}</p>
-          <button @click="router.push('/menus')">메뉴 영향 확인</button>
+        <div class="rec-hero-rank">
+          <span>1</span>
+          <small>판매 1위</small>
         </div>
-      </section>
+      </div>
 
-      <section v-else class="bp-state-panel insufficient">
-        <strong>실제 시장 예측이 아직 없습니다.</strong>
-        <p>{{ risk?.message }}</p>
-        <button @click="router.push('/market')">시장 전망 확인</button>
-      </section>
-
-      <section class="bp-summary-row">
-        <article>
-          <span>분석기간</span>
-          <strong>{{ analysis.period.from }}<br>~ {{ analysis.period.to }}</strong>
-          <small>판매 기록일 {{ analysis.period.record_days }}일</small>
-        </article>
-        <article class="primary">
-          <span>음식 판매량</span>
-          <strong>{{ analysis.summary.food_quantity.toLocaleString() }}개</strong>
-          <small>실매출 {{ formatKRW(analysis.summary.food_net_revenue) }}원</small>
-        </article>
-        <article>
-          <span>판매량 1위</span>
-          <strong>{{ analysis.summary.top_food_menu?.name || '-' }}</strong>
-          <small>{{ analysis.summary.top_food_menu?.quantity?.toLocaleString() || 0 }}개</small>
-        </article>
-        <article>
-          <span>가격위험 분석 가능</span>
-          <strong>{{ analysis.summary.price_risk_ready_menu_count }}개</strong>
-          <small>레시피·시장 품목 연결 기준</small>
-        </article>
-      </section>
-
-      <section class="bp-decision-section">
-        <header><div><span>01</span><h2>판매 주력 메뉴</h2></div><p>실제 판매량과 실매출 기준</p></header>
-        <div class="bp-leader-grid">
-          <button v-for="menu in salesLeaders" :key="menu.menu_id" @click="router.push(`/menus/${menu.menu_id}`)">
-            <img v-if="menu.image_key" :src="menuImages[menu.image_key]" :alt="menu.name">
-            <span v-else class="bp-menu-placeholder">{{ menu.name.slice(0, 1) }}</span>
-            <div><b>{{ menu.rank }}위</b><strong>{{ menu.name }}</strong><p>{{ menu.quantity.toLocaleString() }}개 · {{ formatKRW(menu.net_revenue) }}원</p></div>
+      <!-- ③ 판매 상위 메뉴 -->
+      <section class="section-block" style="margin-top: 24px;">
+        <div class="section-title-row">
+          <h2>판매 상위 메뉴</h2>
+          <router-link to="/menus">전체 보기 →</router-link>
+        </div>
+        <div class="trend-caption">
+          <span class="ah-label">전달 대비 판매량 추이</span>
+          <span class="ah-legend">
+            <i class="up"></i>증가
+            <i class="down"></i>감소
+          </span>
+        </div>
+        <div class="attention-list">
+          <button
+            v-for="menu in topMenus"
+            :key="menu.menu_id"
+            class="attention-item"
+            @click="router.push(`/menus/${menu.menu_id}`)"
+          >
+            <div class="menu-symbol">{{ menu.name.slice(0, 1) }}</div>
+            <div class="attention-copy">
+              <strong>{{ menu.name }}</strong>
+              <span>{{ menu.quantity.toLocaleString() }}개 · {{ formatKRW(menu.net_revenue) }}원</span>
+            </div>
+            <span
+              v-if="menu.trend_rate != null"
+              class="signal"
+              :class="menu.trend_rate > 5 ? 'signal-green' : menu.trend_rate < -5 ? 'signal-red' : 'signal-yellow'"
+            >{{ signed(menu.trend_rate) }}</span>
+            <span v-else></span>
+            <span class="chevron">›</span>
           </button>
         </div>
-        <p class="bp-evidence-note">
-          {{ salesLeaders[0]?.name }}는 분석기간 동안 가장 많이 판매된 음식 메뉴입니다.
-          원가와 고정비가 충분하지 않아 수익성이 좋다고 표현하지 않습니다.
-        </p>
       </section>
 
-      <section class="bp-two-column">
-        <article class="bp-decision-section compact">
-          <header><div><span>02</span><h2>원가 방어가 필요한 메뉴</h2></div></header>
-          <div v-if="costDefense.length" class="bp-compact-list">
-            <button v-for="menu in costDefense" :key="menu.menu_id" @click="router.push(`/menus/${menu.menu_id}`)">
-              <strong>{{ menu.name }}</strong><span>{{ menu.state_reason }}</span><b>확인 →</b>
-            </button>
-          </div>
-          <div v-else class="bp-inline-empty">
-            <strong>아직 계산 가능한 메뉴가 없습니다.</strong>
-            <p>판매 주력 메뉴의 레시피를 먼저 연결해주세요.</p>
-            <button @click="router.push('/ingredients')">재료 연결 확인</button>
-          </div>
-        </article>
+      <!-- ④ 재료 가격 위험 -->
+      <section class="section-block">
+        <div class="section-title-row">
+          <h2>재료 가격 위험</h2>
+        </div>
 
-        <article class="bp-decision-section compact">
-          <header><div><span>03</span><h2>연결이 필요한 메뉴</h2></div><p>{{ pending.length ? '우선순위 상위' : '' }}</p></header>
-          <div class="bp-compact-list">
-            <button v-for="menu in pending" :key="menu.menu_id" @click="router.push(`/menus/${menu.menu_id}`)">
-              <strong>{{ menu.name }}</strong><span>{{ menu.state_reason }}</span><b>연결 →</b>
-            </button>
+        <!-- 연결된 위험 재료가 있을 때 -->
+        <div v-if="riskItems.length" class="attention-list">
+          <button
+            v-for="risk in riskItems"
+            :key="risk.item.code"
+            class="attention-item"
+            @click="router.push('/ingredients')"
+          >
+            <div class="menu-symbol">{{ risk.item.name.slice(0, 1) }}</div>
+            <div class="attention-copy">
+              <strong>{{ risk.item.name }}</strong>
+              <span>{{ risk.affected_menus.map(m => m.name).join(', ') || '연결 확인 필요' }}</span>
+            </div>
+            <span
+              class="signal"
+              :class="Math.abs(risk.headline_change_rate) > 5 ? 'signal-red' : 'signal-yellow'"
+            >{{ signed(risk.headline_change_rate) }}</span>
+            <span class="chevron">›</span>
+          </button>
+        </div>
+
+        <!-- 연결 없을 때 -->
+        <div v-else class="action-card">
+          <div class="action-icon">🌾</div>
+          <div class="action-copy">
+            <span>분석 준비 필요</span>
+            <h2>재료 연결이 아직 없어요</h2>
+            <p>판매 1위 메뉴의 재료를 연결하면 가격 위험을 계산합니다.</p>
           </div>
-        </article>
+          <button class="action-button" @click="router.push('/ingredients')">
+            재료 연결하기 <span>→</span>
+          </button>
+        </div>
       </section>
-
-      <section class="bp-action-today">
-        <div><span>04</span><h2>AI가 제안하는 오늘의 행동</h2></div>
-        <strong>판매량 상위 5개 메뉴부터 레시피 연결 상태를 확인하세요.</strong>
-        <p>시장가격 상승이 실제 메뉴 원가에 미치는 영향을 계산하기 위한 첫 단계입니다.</p>
-        <router-link to="/history">근거와 행동계획 보기 →</router-link>
-      </section>
-
-      <p class="bp-data-rule">판매 기록이 없는 날은 판매량 0으로 처리하지 않았습니다. 판매성과와 수익성은 분리해 표시합니다.</p>
     </template>
   </div>
 </template>
