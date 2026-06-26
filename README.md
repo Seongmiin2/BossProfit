@@ -69,6 +69,7 @@
 | 홈 매출 카드 | **오늘 실제 매출 + AI 예측 매출(최근 일평균)** 요약 카드 | ✅ 구현 |
 | 홈 매출 장부 | **매출 캘린더 장부를 오늘(홈) 화면 최하단에 배치**(리포트에서 이동) | ✅ 구현 |
 | 시장 예측 | 단계형 예측엔진(Base→Weather→Residual), 예측구간·신뢰등급 | ✅ 구현 |
+| LightGBM 예측 | **글로벌 분위 모델(장기 horizon)·conformal 구간보정·통계모델 자동 폴백** | ✅ 구현 |
 | 시장 예측 그래프 | **과거 실적 + 7일 일별 예측 시계열(신뢰구간 음영) 그래프** | ✅ 구현 |
 | 시장 전망 막대 | **1·7·30일 전망을 부호 반영 다이버징 막대(상승↑/하락↓)로 표시** | ✅ 구현 |
 | 시장 랭킹·추천 | 오늘/내일 변동 TOP5, 미리구매/관망/보류 권고 + 근거 | ✅ 구현 |
@@ -193,8 +194,28 @@ final_prediction = base_prediction + weather_adjustment + residual_adjustment
 horizon에서 base를 **마지막 값(naive)으로 fallback**합니다. 즉 *우리 모델이 단순
 기준선보다 못하다는 통계적 증거가 있으면 그 모델을 쓰지 않습니다.*
 
-> 구현: [`bossprofit/profit/forecasting/engine.py`](bossprofit/profit/forecasting/engine.py),
-> 평가: [`bossprofit/profit/forecasting/evaluation.py`](bossprofit/profit/forecasting/evaluation.py)
+#### LightGBM 글로벌 분위 모델 (장기 horizon)
+
+품목별 관측이 얇아(중앙값 ~13개) 품목마다 모델을 두는 대신, **전 품목을 하나로 모은
+글로벌 LightGBM 분위(quantile) 모델**을 학습합니다. 타깃은 가격 레벨이 아니라
+**h일 로그수익률** `log(p_{t+h}/p_t)`이라 품목 간 가격 스케일에 영향받지 않고,
+품목코드·카테고리를 범주형 피처로, lag·rolling·달력 피처를 입력으로 씁니다.
+0.1/0.5/0.9 세 분위를 학습해 중앙값 예측과 예측구간을 동시에 산출하며,
+구간은 conformal 보정으로 목표 80% 커버리지에 맞춥니다.
+
+**horizon별 모델 선택(백테스트 근거).** rolling-origin 백테스트 결과 LightGBM은
+**장기(≥14일)와 관측이 얇은 품목에서** 통계 모델을 앞서고(예: 30일 WAPE 0.083→0.075),
+단기(1·7일)에선 last-value가 더 낫습니다. 따라서 엔진은 **장기 horizon만 LightGBM,
+단기는 통계 모델/last-value**를 쓰며, 학습된 아티팩트가 없으면 통계 모델로 자동 폴백합니다.
+
+| 구분 | 내용 |
+| --- | --- |
+| 학습 | `python manage.py train_lightgbm_forecast` → 글로벌 모델 + 분위구간 보정계수를 아티팩트로 저장 |
+| 검증 | `python manage.py backtest_lightgbm` → LightGBM vs 통계·last-value·seasonal-naive 비교 |
+| 적용 | `ForecastEngine`이 horizon≥14에서 아티팩트 사용, 미존재 시 통계 모델 폴백 |
+
+> 구현: [`engine.py`](bossprofit/profit/forecasting/engine.py)·[`lightgbm_model.py`](bossprofit/profit/forecasting/lightgbm_model.py),
+> 평가: [`evaluation.py`](bossprofit/profit/forecasting/evaluation.py)
 
 ### D-2. 구매 추천 규칙 엔진
 
@@ -541,6 +562,28 @@ LLM이 그럴듯한 거짓 수치를 만들지 않게 하는 게 관건이었습
 분석·LLM 엔드포인트에 연결**해, 보여주기용 비활성 버튼을 없앴습니다.
 → *배운 점:* 차트의 방향·색 같은 시각 요소도 "기능 명세의 일부"다. 사용자는 숫자보다
 막대의 방향을 먼저 읽기 때문에, 시각화가 부호를 틀리면 데이터 전체의 신뢰가 깨진다.
+
+### 9단계 — LightGBM 도입: "문서에만 있던 모델을 실제로, 정직하게"
+
+기획 문서엔 "LightGBM Quantile Global Model"이 적혀 있었지만 코드는 순수 통계 모델뿐이었습니다.
+이 간극을 닫되 *"좋아 보이니까 쓴다"*가 아니라 **백테스트로 이긴 곳에서만 쓰도록** 했습니다.
+→ *어려웠던 점:* 품목당 관측이 중앙값 13개로 너무 얇아 품목별 트리 모델은 과적합했습니다.
+그래서 **전 품목을 하나로 모은 글로벌 모델 + 로그수익률 타깃**으로 바꿔 스케일 문제를
+흡수했습니다.
+→ *배운 점:* rolling-origin 백테스트로 비교해보니 LightGBM은 **만능이 아니라 장기 horizon
+에서만** 이겼습니다(단기는 last-value가 우위). "모델을 넣었다"가 아니라 *"어디서 이기는지"*
+를 측정해 **horizon별로 모델을 갈라 쓰는** 게 정답이었습니다.
+→ *새로 배운 것:* 분위(quantile) 회귀로 예측구간을 직접 산출하고, **conformal 보정**으로
+실측 커버리지를 80%에 맞추는 법. 그리고 학습된 모델은 아티팩트로 분리해, 없으면 통계
+모델로 자동 폴백하도록 한 **안전한 점진 도입** 패턴.
+→ *느낀 점:* 얇은 데이터에선 화려한 모델보다 **"많은 품목을 한 모델로 묶어 서로의 패턴을
+빌려 쓰게 하는"** 구조적 선택이 더 큰 차이를 만들었다. 덤으로, 통계 모델이 관측 부족으로
+실패하던 품목도 폴백 덕분에 예측 성공 품목이 5→67개로 늘었다.
+
+또한 데모 환경 재현을 위해 **DB 전체 스냅샷을 Django fixture(`loaddata bootstrap`)로**
+만들면서, Windows에서 `dumpdata -o`가 cp949로 저장돼 깨지는 문제를 겪고 **UTF-8 stdout
+리다이렉트**로 교정했습니다. 작은 인코딩 문제 하나가 협업 재현성을 통째로 막을 수 있다는 걸
+배웠습니다.
 
 ### 전체 회고
 
