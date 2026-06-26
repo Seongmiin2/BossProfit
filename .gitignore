@@ -1,5 +1,6 @@
 venv/
 .venv/
+.venv-mac/
 __pycache__/
 *.py[cod]
 
@@ -15,6 +16,9 @@ db.sqlite3
 *.db
 
 generated/
+
+# Trained LightGBM artifact (regenerate via train_lightgbm_forecast).
+bossprofit/profit/forecasting/artifacts/
 
 # Real store exports contain private operational data.
 /수원세류점*.xlsx

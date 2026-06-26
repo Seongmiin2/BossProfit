@@ -328,7 +328,11 @@ class ForecastEngineTests(TestCase):
             collected_at=timezone.now(),
         )
 
-        ForecastEngine().run(self.item, as_of_date, horizons=(1, 60, 90))
+        # 이 테스트는 통계 가산 파이프라인(base+weather+residual)의 무누설 속성을
+        # 검증하므로 LightGBM 경로를 끈다.
+        ForecastEngine(use_lightgbm=False).run(
+            self.item, as_of_date, horizons=(1, 60, 90)
+        )
 
         run = ForecastRun.objects.get(item=self.item, as_of_date=as_of_date)
         self.assertEqual(run.status, "SUCCEEDED")
