@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.utils import timezone
 
+from profit.forecasting.lightgbm_model import TrainedLightGBMArtifact
 from profit.models import (
     ForecastCalibration,
     ForecastComponent,
@@ -19,6 +20,11 @@ from profit.models import (
 
 
 MONEY = Decimal("0.01")
+
+# 백테스트 근거: LightGBM은 장기(>=14일) horizon에서 통계 모델을 이기고, 단기는
+# LastValue/통계 모델이 더 낫다. 따라서 이 임계값 이상에서만 LightGBM을 쓴다.
+LIGHTGBM_MIN_HORIZON = 14
+LIGHTGBM_VERSION = "lightgbm-global-quantile-v1"
 
 
 def money(value):
@@ -193,11 +199,37 @@ class ForecastEngine:
     model_version = "bossprofit-statistical-v1"
     feature_version = "market-weather-supply-v1"
 
-    def __init__(self):
+    def __init__(self, use_lightgbm=True):
         self.base_model = BasePriceModel()
         self.weather_model = WeatherSupplyImpactModel()
         self.residual_model = ResidualCorrectionModel()
         self.calibration = IntervalCalibration()
+        self.use_lightgbm = use_lightgbm
+        self._lightgbm_loaded = False
+        self._lightgbm = None
+
+    def _lightgbm_artifact(self):
+        if not self.use_lightgbm:
+            return None
+        if not self._lightgbm_loaded:
+            self._lightgbm = TrainedLightGBMArtifact.load()
+            self._lightgbm_loaded = True
+        return self._lightgbm
+
+    def _lightgbm_prediction(self, item, observations, as_of_date, horizon):
+        """장기 horizon에 한해 학습된 글로벌 LightGBM 예측을 반환(없으면 None)."""
+        if horizon < LIGHTGBM_MIN_HORIZON:
+            return None
+        artifact = self._lightgbm_artifact()
+        if artifact is None:
+            return None
+        rows = [(o.observed_date, o.price) for o in observations]
+        try:
+            return artifact.predict_interval(
+                rows, item.code, item.category, as_of_date, horizon
+            )
+        except Exception:
+            return None
 
     def run(self, item: MarketItem, as_of_date, horizons=(1, 7, 30, 60, 90)):
         observation_query = item.observations.filter(
@@ -230,51 +262,114 @@ class ForecastEngine:
         published = []
         try:
             for horizon in horizons:
-                base = self.base_model.predict(observations, horizon)
-                comparison = ForecastModelComparison.objects.filter(
-                    item=item,
-                    horizon_days=horizon,
-                    candidate_version=self.model_version,
-                    baseline_version="baseline-last-value-v1",
-                    metric="MAE",
-                    is_significant=True,
-                    difference__gt=0,
-                ).first()
-                if comparison:
+                lgbm = self._lightgbm_prediction(
+                    item, observations, as_of_date, horizon
+                )
+                if lgbm is not None:
+                    # 장기 horizon: 학습된 글로벌 LightGBM 분위 모델을 사용.
+                    final_prediction = money(lgbm["median"])
+                    lower = money(max(Decimal("0"), Decimal(str(lgbm["lower"]))))
+                    upper = money(lgbm["upper"])
                     base = StagePrediction(
-                        value=money(observations[-1].price),
+                        value=final_prediction,
                         details={
-                            **base.details,
-                            "selected_model": "baseline-last-value-v1",
-                            "fallback_reason": "CANDIDATE_SIGNIFICANTLY_WORSE",
-                            "paired_bootstrap_ci": [
-                                str(comparison.ci_lower),
-                                str(comparison.ci_upper),
-                            ],
+                            "model": LIGHTGBM_VERSION,
+                            "selected_model": LIGHTGBM_VERSION,
+                            "origin_date": lgbm["origin_date"].isoformat(),
                         },
                     )
+                    weather = StagePrediction(
+                        value=Decimal("0"),
+                        details={"enabled": False, "reason": "LIGHTGBM_PATH"},
+                    )
+                    residual = StagePrediction(
+                        value=Decimal("0"),
+                        details={"enabled": False, "reason": "LIGHTGBM_PATH"},
+                    )
+                    calibration_details = {
+                        "calibrated": lgbm["coverage"] is not None,
+                        "method": "CONFORMAL_QUANTILE_SCALE",
+                        "model": LIGHTGBM_VERSION,
+                        "measured_coverage": (
+                            str(lgbm["coverage"])
+                            if lgbm["coverage"] is not None
+                            else None
+                        ),
+                    }
                 else:
-                    base = StagePrediction(
-                        value=base.value,
-                        details={
-                            **base.details,
-                            "selected_model": self.model_version,
-                        },
+                    try:
+                        base = self.base_model.predict(observations, horizon)
+                        statistical_ok = True
+                    except ValueError as exc:
+                        # 관측이 통계모델 최소치 미만 — last-value로 폴백(품목 전체
+                        # 실패 대신 정직한 베이스라인 예측을 제공).
+                        base = StagePrediction(
+                            value=money(observations[-1].price),
+                            details={
+                                "model": "baseline-last-value-v1",
+                                "insufficient_history": str(exc),
+                            },
+                        )
+                        statistical_ok = False
+                    comparison = (
+                        ForecastModelComparison.objects.filter(
+                            item=item,
+                            horizon_days=horizon,
+                            candidate_version=self.model_version,
+                            baseline_version="baseline-last-value-v1",
+                            metric="MAE",
+                            is_significant=True,
+                            difference__gt=0,
+                        ).first()
+                        if statistical_ok
+                        else None
                     )
-                weather = self.weather_model.predict(
-                    item,
-                    as_of_date,
-                    base.value,
-                    horizon,
-                )
-                residual = self.residual_model.predict(item, horizon)
-                final_prediction = money(base.value + weather.value + residual.value)
-                lower, upper, calibration_details = self.calibration.interval(
-                    item,
-                    self.model_version,
-                    horizon,
-                    final_prediction,
-                )
+                    if not statistical_ok:
+                        base = StagePrediction(
+                            value=base.value,
+                            details={
+                                **base.details,
+                                "selected_model": "baseline-last-value-v1",
+                                "fallback_reason": "INSUFFICIENT_HISTORY",
+                            },
+                        )
+                    elif comparison:
+                        base = StagePrediction(
+                            value=money(observations[-1].price),
+                            details={
+                                **base.details,
+                                "selected_model": "baseline-last-value-v1",
+                                "fallback_reason": "CANDIDATE_SIGNIFICANTLY_WORSE",
+                                "paired_bootstrap_ci": [
+                                    str(comparison.ci_lower),
+                                    str(comparison.ci_upper),
+                                ],
+                            },
+                        )
+                    else:
+                        base = StagePrediction(
+                            value=base.value,
+                            details={
+                                **base.details,
+                                "selected_model": self.model_version,
+                            },
+                        )
+                    weather = self.weather_model.predict(
+                        item,
+                        as_of_date,
+                        base.value,
+                        horizon,
+                    )
+                    residual = self.residual_model.predict(item, horizon)
+                    final_prediction = money(
+                        base.value + weather.value + residual.value
+                    )
+                    lower, upper, calibration_details = self.calibration.interval(
+                        item,
+                        self.model_version,
+                        horizon,
+                        final_prediction,
+                    )
                 point = ForecastPoint.objects.create(
                     run=run,
                     target_date=as_of_date + timedelta(days=horizon),

@@ -8,20 +8,15 @@ const router = useRouter()
 const TYPES = [
   { key: 'tomorrow', label: 'AI 가격 전망', sub: '30일 예상 변동률 기준' },
   { key: 'today',    label: '오늘 변동',    sub: '직전 거래일 대비 등락률' },
-  { key: 'volume',   label: '거래량',       sub: '도매시장 거래량 기준' },
 ]
 
-const panels = ref({ tomorrow: null, today: null, volume: null })
-const loadingCount = ref(3)
+const panels = ref({ tomorrow: null, today: null })
+const loadingCount = ref(TYPES.length)
 const asOfDate = ref(null)
 
 function formatPct(v) {
   if (v === null || v === undefined) return '--'
   return `${Number(v) > 0 ? '+' : ''}${Number(v).toFixed(1)}%`
-}
-function formatPrice(v) {
-  if (v === null || v === undefined) return '--'
-  return `${Math.round(v).toLocaleString()}원`
 }
 
 const go = (type) => router.push(`/market/rankings/${type}`)
@@ -81,7 +76,7 @@ onMounted(async () => {
               class="mv-item-rate"
               :class="item.change_rate > 3 ? 'rate-up' : item.change_rate < -3 ? 'rate-down' : 'rate-flat'"
             >
-              {{ t.key === 'volume' ? formatPrice(item.current_price) : formatPct(item.change_rate) }}
+              {{ formatPct(item.change_rate) }}
             </span>
           </li>
         </ol>
@@ -102,7 +97,7 @@ onMounted(async () => {
 
 .mv-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 @media (max-width: 720px) { .mv-grid { grid-template-columns: 1fr; } }

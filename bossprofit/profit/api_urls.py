@@ -22,6 +22,16 @@ urlpatterns = [
         name="api-analysis-report",
     ),
     path(
+        "analysis/calendar/",
+        api_views.api_sales_calendar,
+        name="api-sales-calendar",
+    ),
+    path(
+        "analysis/calendar/day/",
+        api_views.api_sales_day_detail,
+        name="api-sales-day-detail",
+    ),
+    path(
         "analysis/follow-up/",
         api_views.api_analysis_follow_up,
         name="api-analysis-follow-up",

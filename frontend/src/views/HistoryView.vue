@@ -131,7 +131,6 @@ const signed = v => v != null ? `${Number(v) >= 0 ? '+' : ''}${Number(v).toFixed
           <span class="rp-ai-dot"></span>
           <div>
             <strong>AI 매장 어시스턴트</strong>
-            <span>{{ report.data_period?.from }} ~ {{ report.data_period?.to }}</span>
           </div>
           <span v-if="report.used_llm" class="rp-llm-badge">GPT-4o</span>
         </div>

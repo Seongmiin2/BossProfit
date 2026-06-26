@@ -21,7 +21,7 @@ class IngredientSerializer(serializers.ModelSerializer):
         fields = [
             'ingredient_id', 'name', 'category',
             'purchase_quantity', 'purchase_price', 'unit',
-            'memo', 'unit_cost'
+            'is_hq_supplied', 'memo', 'unit_cost'
         ]
 
     def get_unit_cost(self, obj):
@@ -206,7 +206,7 @@ class IngredientWriteSerializer(serializers.ModelSerializer):
     """재료 작성용"""
     class Meta:
         model = Ingredient
-        fields = ['ingredient_id', 'name', 'category', 'purchase_quantity', 'purchase_price', 'unit', 'memo']
+        fields = ['ingredient_id', 'name', 'category', 'purchase_quantity', 'purchase_price', 'unit', 'is_hq_supplied', 'memo']
 
     def validate_purchase_quantity(self, value):
         if value <= 0:

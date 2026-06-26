@@ -9,6 +9,9 @@ import fishcakeUdon from '@/assets/menu/fishcake-udon.webp'
 import friedDumplings from '@/assets/menu/fried-dumplings.webp'
 import tonkatsuSet from '@/assets/menu/tonkatsu-set.webp'
 import spicyUdon from '@/assets/menu/spicy-udon.webp'
+import menuPlaceholder from '@/assets/menu/placeholder.svg'
+
+export { menuPlaceholder }
 
 export const produceImages = {
   onion,

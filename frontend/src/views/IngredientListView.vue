@@ -13,6 +13,7 @@ const formData = ref({
   purchase_quantity: '',
   purchase_price: '',
   unit: 'g',
+  is_hq_supplied: false,
   memo: ''
 })
 
@@ -87,8 +88,15 @@ async function handleDelete(ingredientId) {
 <template>
   <div>
     <!-- Header -->
-    <div class="banner">
+    <div class="banner" style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
       <h1>🧂 재료 관리</h1>
+      <button
+        @click="openCreateForm"
+        class="btn-coral"
+        style="padding: 12px 20px; font-weight: 700; font-size: 16px; white-space: nowrap;"
+      >
+        + 새 재료 추가
+      </button>
     </div>
 
     <!-- Loading -->
@@ -104,17 +112,6 @@ async function handleDelete(ingredientId) {
 
     <!-- Content -->
     <div v-else>
-      <!-- Add Button -->
-      <div style="margin-bottom: 24px;">
-        <button
-          @click="openCreateForm"
-          class="btn-coral"
-          style="padding: 12px 20px; font-weight: 700; font-size: 16px;"
-        >
-          + 새 재료 추가
-        </button>
-      </div>
-
       <!-- Table -->
       <div v-if="ingredientStore.ingredients.length > 0" class="data-table-wrap">
         <table class="data-table">
@@ -126,6 +123,7 @@ async function handleDelete(ingredientId) {
               <th class="right" style="width: 80px;">구매량</th>
               <th class="right" style="width: 100px;">단위가</th>
               <th style="width: 50px;">단위</th>
+              <th style="width: 90px;">본사납품</th>
               <th style="width: 120px;">액션</th>
             </tr>
           </thead>
@@ -137,6 +135,10 @@ async function handleDelete(ingredientId) {
               <td class="right tabular">{{ ing.purchase_quantity }}</td>
               <td class="right tabular">{{ ing.unit_cost.toFixed(2) }}</td>
               <td style="text-align: center;">{{ ing.unit }}</td>
+              <td style="text-align: center;">
+                <span v-if="ing.is_hq_supplied" class="hq-badge">본사</span>
+                <span v-else style="color: var(--ink-light);">-</span>
+              </td>
               <td style="display: flex; gap: 4px;">
                 <button
                   @click="openEditForm(ing)"
@@ -257,6 +259,17 @@ async function handleDelete(ingredientId) {
             </div>
           </div>
 
+          <!-- 본사 납품 여부 -->
+          <div class="mb-3">
+            <label class="hq-check">
+              <input v-model="formData.is_hq_supplied" type="checkbox" />
+              <span>
+                <strong>본사 납품 재료</strong>
+                <small>본사 납품가가 정해져 있어 시장가격 변동 영향이 거의 없는 재료입니다.</small>
+              </span>
+            </label>
+          </div>
+
           <!-- 메모 -->
           <div class="mb-3">
             <label class="form-label">메모</label>
@@ -331,5 +344,44 @@ async function handleDelete(ingredientId) {
 
 .mb-3 {
   margin-bottom: 16px;
+}
+
+.hq-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--coral, #c95626);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.hq-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--cream-light);
+  cursor: pointer;
+}
+
+.hq-check input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.hq-check span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hq-check small {
+  color: var(--ink-light);
+  font-size: 12px;
 }
 </style>

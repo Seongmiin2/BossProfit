@@ -5,6 +5,10 @@ OpenAI API를 사용해 매장 데이터 기반 분석을 제공합니다.
 import os
 
 
+# 사용할 모델명. SSAFY GMS 등 프록시는 자체 모델명을 쓸 수 있어 환경변수로 조정.
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+
+
 def _get_client():
     try:
         import openai
@@ -13,7 +17,12 @@ def _get_client():
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise ValueError("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
-    return openai.OpenAI(api_key=api_key)
+    # OPENAI_BASE_URL이 있으면 OpenAI 호환 프록시(SSAFY GMS 등)로 연결한다.
+    base_url = os.environ.get("OPENAI_BASE_URL", "").strip()
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    return openai.OpenAI(**kwargs)
 
 
 def build_store_context(report):
@@ -89,7 +98,7 @@ def call_openai_follow_up(question, store_context):
     """Returns (answer_text: str, engine_name: str)."""
     client = _get_client()
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT.format(context=store_context)},
             {"role": "user", "content": question},
@@ -97,7 +106,7 @@ def call_openai_follow_up(question, store_context):
         max_tokens=600,
         temperature=0.4,
     )
-    return response.choices[0].message.content.strip(), "gpt-4o-mini"
+    return response.choices[0].message.content.strip(), MODEL
 
 
 def generate_report_summary(report):
@@ -140,7 +149,7 @@ def generate_report_summary(report):
 
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=MODEL,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=150,
             temperature=0.3,

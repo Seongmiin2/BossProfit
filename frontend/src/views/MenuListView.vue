@@ -1,8 +1,10 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { fetchStoreAnalysis } from '@/api/endpoints'
 import { formatKRW } from '@/utils/format'
-import { menuImages } from '@/utils/productAssets'
+import { menuImages, menuPlaceholder } from '@/utils/productAssets'
+
+const photoFor = (menu) => menuImages[menu?.image_key] || menuPlaceholder
 
 const payload = ref(null)
 const loading = ref(true)
@@ -11,11 +13,18 @@ const query = ref('')
 const activeSegment = ref('sales')
 const selected = ref(null)
 
+const dateFrom = ref('')
+const dateTo = ref('')
+const activePreset = ref('all')
+
 const load = async () => {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await fetchStoreAnalysis()
+    const params = {}
+    if (dateFrom.value) params.from = dateFrom.value
+    if (dateTo.value) params.to = dateTo.value
+    const { data } = await fetchStoreAnalysis(params)
     payload.value = data
     selected.value = data.analysis.top_menus?.[0] || null
   } catch (e) {
@@ -28,8 +37,33 @@ const load = async () => {
 onMounted(load)
 
 const analysis = computed(() => payload.value?.analysis)
+const availablePeriod = computed(() => analysis.value?.available_period || {})
+
+const shiftDate = (iso, days) => {
+  const d = new Date(iso)
+  d.setDate(d.getDate() - days)
+  return d.toISOString().slice(0, 10)
+}
+
+const applyPreset = (key) => {
+  activePreset.value = key
+  const to = availablePeriod.value?.to
+  if (key === 'all' || !to) {
+    dateFrom.value = ''
+    dateTo.value = ''
+  } else {
+    const days = { '7': 6, '30': 29, '90': 89 }[key]
+    dateTo.value = to
+    dateFrom.value = shiftDate(to, days)
+  }
+  load()
+}
+
+const applyCustom = () => {
+  activePreset.value = 'custom'
+  load()
+}
 const maxQuantity = computed(() => Math.max(...(analysis.value?.top_menus?.map(item => item.quantity) || [1])))
-const maxRevenue = computed(() => Math.max(...(analysis.value?.menus?.map(item => item.net_revenue) || [1])))
 const filtered = computed(() => {
   const keyword = query.value.trim().toLowerCase()
   const stateBySegment = {
@@ -49,6 +83,14 @@ const tabCounts = computed(() => ({
   ANALYSIS_PENDING: analysis.value?.menus?.filter(item => item.state === 'ANALYSIS_PENDING').length || 0,
 }))
 const trendText = (value) => value == null ? '비교 가능한 기록 부족' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+const percentText = (value) => value == null ? '-' : `${(value * 100).toFixed(1)}%`
+
+const detailPanel = ref(null)
+const selectMenu = async (menu) => {
+  selected.value = menu
+  await nextTick()
+  detailPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 </script>
 
 <template>
@@ -66,6 +108,21 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
         <router-link to="/menus/create" class="bp-outline-button">메뉴 추가</router-link>
       </header>
 
+      <section class="bp-period-bar">
+        <div class="bp-period-presets">
+          <button :class="{ active: activePreset === 'all' }" @click="applyPreset('all')">전체</button>
+          <button :class="{ active: activePreset === '7' }" @click="applyPreset('7')">최근 7일</button>
+          <button :class="{ active: activePreset === '30' }" @click="applyPreset('30')">최근 30일</button>
+          <button :class="{ active: activePreset === '90' }" @click="applyPreset('90')">최근 90일</button>
+        </div>
+        <div class="bp-period-range">
+          <input type="date" v-model="dateFrom" :min="availablePeriod.from" :max="availablePeriod.to">
+          <span>~</span>
+          <input type="date" v-model="dateTo" :min="availablePeriod.from" :max="availablePeriod.to">
+          <button class="bp-period-apply" @click="applyCustom">적용</button>
+        </div>
+      </section>
+
       <section class="bp-menu-stats">
         <article><span>분석기간</span><strong>{{ analysis.period.from }}<br>~ {{ analysis.period.to }}</strong></article>
         <article><span>음식 메뉴</span><strong>{{ analysis.summary.food_menu_count }}개</strong></article>
@@ -78,7 +135,7 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
       <section class="bp-analysis-panel">
         <header><div><span>판매량 TOP 5</span><h2>실제 POS 판매성과</h2></div><small>단위: 개 · {{ analysis.period.from }}~{{ analysis.period.to }}</small></header>
         <div class="bp-horizontal-bars">
-          <button v-for="menu in analysis.top_menus" :key="menu.menu_id" @click="selected = menu">
+          <button v-for="menu in analysis.top_menus" :key="menu.menu_id" @click="selectMenu(menu)">
             <span>{{ menu.rank }}</span><strong>{{ menu.name }}</strong>
             <i><b :style="{ width: `${(menu.quantity / maxQuantity) * 100}%` }"></b></i>
             <em>{{ menu.quantity.toLocaleString() }}개</em>
@@ -111,27 +168,6 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
         </article>
       </section>
 
-      <section class="bp-analysis-panel">
-        <header><div><span>메뉴 포트폴리오</span><h2>판매량과 실매출 비교</h2></div><small>원 크기: 최근 30일 판매량</small></header>
-        <div class="bp-scatter">
-          <span class="axis-y">실매출 ↑</span>
-          <button
-            v-for="menu in analysis.menus.slice(0, 20)"
-            :key="menu.menu_id"
-            :title="`${menu.name}: ${menu.quantity}개 / ${formatKRW(menu.net_revenue)}원`"
-            :style="{
-              left: `${Math.max(4, Math.min(94, (menu.quantity / maxQuantity) * 92))}%`,
-              bottom: `${Math.max(5, Math.min(90, (menu.net_revenue / maxRevenue) * 88))}%`,
-              width: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
-              height: `${18 + Math.min(26, (menu.recent_30d_quantity || 0) / 3)}px`,
-            }"
-            :class="menu.state.toLowerCase()"
-            @click="selected = menu"
-          >{{ menu.rank <= 5 ? menu.rank : '' }}</button>
-          <span class="axis-x">판매량 →</span>
-        </div>
-      </section>
-
       <section class="bp-menu-browser">
         <header>
           <div class="bp-tab-row">
@@ -143,9 +179,8 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
         </header>
 
         <div v-if="filtered.length" class="bp-photo-menu-grid">
-          <button v-for="menu in filtered" :key="menu.menu_id" @click="selected = menu">
-            <img v-if="menu.image_key" :src="menuImages[menu.image_key]" :alt="menu.name">
-            <span v-else class="bp-photo-placeholder">{{ menu.name.slice(0, 1) }}</span>
+          <button v-for="menu in filtered" :key="menu.menu_id" @click="selectMenu(menu)">
+            <img :src="photoFor(menu)" :alt="menu.name">
             <div class="bp-menu-card-body">
               <span>{{ menu.state_label }} · {{ menu.state_reason }}</span>
               <h3>{{ menu.name }}</h3>
@@ -155,7 +190,7 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
                 <div><dt>최근 30일</dt><dd>{{ menu.recent_30d_quantity == null ? '기록 없음' : `${menu.recent_30d_quantity}개` }}</dd></div>
                 <div><dt>판매 추세</dt><dd>{{ trendText(menu.trend_rate) }}</dd></div>
               </dl>
-              <p>{{ menu.profitability_message || '레시피와 시장가격을 연결해 원가 위험을 계산했습니다.' }}</p>
+              <p v-if="!menu.profitability">{{ menu.profitability_message || '레시피와 시장가격을 연결해 원가 위험을 계산했습니다.' }}</p>
               <b>판단 근거 보기 →</b>
             </div>
           </button>
@@ -166,10 +201,9 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
         </div>
       </section>
 
-      <section v-if="selected" class="bp-menu-detail-panel">
+      <section v-if="selected" ref="detailPanel" class="bp-menu-detail-panel">
         <div class="bp-detail-visual">
-          <img v-if="selected.image_key" :src="menuImages[selected.image_key]" :alt="selected.name">
-          <span v-else>{{ selected.name.slice(0, 1) }}</span>
+          <img :src="photoFor(selected)" :alt="selected.name">
         </div>
         <div class="bp-detail-content">
           <span>{{ selected.state_label }} · {{ selected.state_reason }}</span>
@@ -180,15 +214,22 @@ const trendText = (value) => value == null ? '비교 가능한 기록 부족' : 
             <div><small>평균 판매단가</small><strong>{{ formatKRW(selected.average_selling_price) }}원</strong></div>
             <div><small>할인금액</small><strong>{{ formatKRW(selected.discount_amount) }}원</strong></div>
           </div>
+          <div v-if="selected.profitability" class="bp-detail-metrics">
+            <div><small>재료원가</small><strong>{{ formatKRW(selected.profitability.food_cost) }}원</strong></div>
+            <div><small>원가율</small><strong>{{ percentText(selected.profitability.food_cost_rate) }}</strong></div>
+            <div><small>재료마진</small><strong>{{ formatKRW(selected.profitability.margin_amount) }}원</strong></div>
+            <div><small>마진율</small><strong>{{ percentText(selected.profitability.margin_rate) }}</strong></div>
+          </div>
           <div class="bp-data-gap">
             <strong>데이터 상태</strong>
-            <p>{{ selected.recipe.reason || '레시피와 시장 품목이 연결됐습니다.' }}</p>
+            <p v-if="selected.profitability">재료원가 기준 수익성을 계산했습니다. 시장가격 위험은 {{ selected.price_risk_state === 'AVAILABLE' ? '계산 가능합니다.' : '시장 품목 연결 후 계산할 수 있습니다.' }}</p>
+            <p v-else>{{ selected.recipe.reason || '레시피와 시장 품목이 연결됐습니다.' }}</p>
           </div>
           <router-link :to="`/menus/${selected.menu_id}`">상세 분석 화면 열기 →</router-link>
         </div>
       </section>
 
-      <p class="bp-data-rule">메뉴 사진은 정확히 일치하는 5개 메뉴에만 적용했습니다. 다른 메뉴에는 임의의 음식 사진을 사용하지 않았습니다.</p>
+      <p class="bp-data-rule">메뉴 사진은 같은 종류(우동·돈까스·만두) 기준으로 표시하고, 해당 사진이 없는 메뉴는 공통 플레이스홀더로 표시합니다.</p>
     </template>
   </div>
 </template>
